@@ -1,5 +1,5 @@
 ---
-layout: default 
+layout: page 
 title: OpenPGP Public Key
 permalink: /openpgp/
 ---
