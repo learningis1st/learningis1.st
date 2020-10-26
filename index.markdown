@@ -5,4 +5,4 @@
 layout: home
 ---
 
-<img src="/favicon.png" alt="" width="75" height="75" align="right" />
+<img src="/favicon.png" alt="learningis1st's avatar" width="75" height="75" align="right" />
