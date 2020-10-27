@@ -5,4 +5,4 @@
 layout: home
 ---
 
-<img src="/favicon.png" alt="learningis1st's avatar" width="75" height="75" align="right" />
+<img src="/IMG_1323_waifu2x_art_noise3_scale_tta_1.jpg" alt="learningis1st's avatar" width="75" height="75" align="right" />
