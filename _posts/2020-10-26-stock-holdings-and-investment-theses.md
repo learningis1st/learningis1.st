@@ -18,7 +18,7 @@ categories: blog
 | 达美乐披萨（DPZ）<span style="color:green">+6%</span>	| 最受益于疫情的快餐连锁店之一，拥有最成熟的外送模式；股价相对同行便宜
 | Shopify（SHOP）<span style="color:green">+12%</span>	| 让人想起20年前的亚马逊（AMZN）；最优秀的SaaS公司没有之一；加拿大的骄傲
 | CVS（CVS）<span style="color:green">+2%</span>		| 零售药店；近年来被市场抛弃的价值股——股价低到不能再低了
-| 高乐氏（CLX）<span style="color:green">+2%</span>		| 货架上的清洁日用品被一扫而空，产品供不应求。本是疫情中的绝对赢家，股价却背离了营收的增长
+| 高乐氏（CLX）<span style="color:green">+2%</span>		| 货架上的清洁日用品被一扫而空，产品供不应求。本应是疫情中的绝对赢家，股价却背离了营收的增长
 | 英特尔（INTC）<span style="color:red">-3%</span>		| 一言难尽
 | 艾伯维（ABBV）<span style="color:red">-3%</span>		| 稳定、强劲的股息收益率（5.6%）
 
