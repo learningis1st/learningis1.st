@@ -1,0 +1,63 @@
+==================================================================
+https://keybase.io/learningis1st
+--------------------------------------------------------------------
+
+I hereby claim:
+
+  * I am an admin of https://learningis1.st
+  * I am learningis1st (https://keybase.io/learningis1st) on keybase.
+  * I have a public key with fingerprint 9FB8 FC90 7D6B 9C21 CCBF  A510 4C8B D385 C108 986F
+
+To do so, I am signing this object:
+
+{
+  "body": {
+    "key": {
+      "eldest_kid": "0101d89606aab0f8a50436137ee0dab49848d6ef0991a0e006893c0567d9f9d1fb6e0a",
+      "fingerprint": "9fb8fc907d6b9c21ccbfa5104c8bd385c108986f",
+      "host": "keybase.io",
+      "key_id": "4c8bd385c108986f",
+      "kid": "011633cac8d4f1cf05ea39009a2fabc7949c0670df79730d06a63ff3d031d892f4f50a",
+      "uid": "ca38bc21e075708c64a72402af1df819",
+      "username": "learningis1st"
+    },
+    "service": {
+      "hostname": "learningis1.st",
+      "protocol": "https:"
+    },
+    "type": "web_service_binding",
+    "version": 1
+  },
+  "ctime": 1675576809,
+  "expire_in": 157680000,
+  "prev": "cd4da61aea9a2ca0b36ebc70f4c86cbe1aca09686d4f8e73484bc66de028d9c4",
+  "seqno": 239,
+  "tag": "signature"
+}
+
+which yields the signature:
+
+-----BEGIN PGP MESSAGE-----
+
+owFtUj1rFUEU3WjEJKgoSAoxhdNFnuHOzuzszMNCkARCqugPeM7HnWTNc/dldxON
+IY0giNWzDyLYBJQg+BcUCRK0sLATgh+IhWChYqOzD1PpNMPcOefMOYfpHz0YjYyf
+uzVzmu79ckMvP5vIvpv+vk5M4dZIe50s4WDDrsOq7ixljrQJUKBOKgFCawNe6gQ4
+E5SliOC04Upy6QR6UIpqQAAhFbOQiNQprxz1RiBo0iI+yxew7JVZXgdZ5Y30VkHq
+hFE2ptYarxMK3ErjmEwsBamk8IG4WFQNI5gzusKprAizcOgM7P0Hv++bCsasttJx
+T62HBDVTAErHXhubKq4siBScT1XKwIV8gnnPHLAmb+y5Twa+VwZyVjNpgk+ENElB
+WsF1GnOItafOS6oaYIVlrq9hQHdRl3nIm1U0eN9okXC1mlls2m3i/AubCrgW6ZVF
+XdiiG+4W67pXtRtuvdZrwNfRdP7KdEyWu8ALjFUsq6zISZsGpK2zRpeKNElSIUG1
+CN7oZSV2sgYxmIXVvIOrQVJbx50WVKMOtVgNhgkM3YAPtQprkOowVEKK0KHElHHJ
+jRXCIcTSKctJk2w5L0g7ZuGxWi8E1SpbyHW9UiLZGLuzMhyNj0QT42eGxeTt2Sc7
+d7e253/q/T946EDzAaOx0eP7kxcfot8Xo08/tu493nl/ZOv+lZkLu3Ozby7N7z3t
+b1z+tnn12dToUPRg70T/1cntzcnDX8+/7Y6e6j9Kzn55ODF3c/dj/vz19LE/
+=6wxt
+-----END PGP MESSAGE-----
+
+And finally, I am proving ownership of this host by posting or
+appending to this document.
+
+View my publicly-auditable identity here: https://keybase.io/learningis1st
+
+==================================================================
+
