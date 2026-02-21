@@ -1,0 +1,50 @@
+# Site-wide settings
+# ------------------
+
+title: learningis1st
+author:
+  name: Yijia Chen
+  email: chenyijia001@gmail.com
+
+description: >-
+  A Boring Blog
+
+baseurl: "" # the subpath of your site, e.g. /blog
+url: "https://learningis1.st" # the base hostname & protocol for your site
+
+# Build settings
+# --------------
+
+theme: minima
+
+plugins:
+  - jekyll-feed
+  - jekyll-seo-tag
+  - jekyll-sitemap
+
+include:
+  - ".well-known"
+
+# Minima-specific settings
+# ------------------------
+
+minima:
+  skin: auto
+  nav_pages:
+    - about.md
+    - openpgp.md
+  # Uncomment and customize if you want a specific date format
+  # date_format: "%b-%d-%Y"
+  social_links:
+    - title: GitHub
+      icon: github
+      url: "https://github.com/learningis1st"
+    - title: Keybase
+      icon: keybase
+      url: "https://keybase.io/learningis1st"
+    - title: Telegram
+      icon: telegram
+      url: "https://t.me/learningis1st"
+    - title: Twitter
+      icon: x-twitter
+      url: "https://twitter.com/learningis1st"
