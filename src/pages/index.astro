@@ -4,6 +4,7 @@ import SocialLink from "../components/SocialLink.astro";
 
 const title = "learningis1.st";
 const description = "learningis1st - Connect with me on social media and email";
+const stripePaymentUrl = "https://buy.stripe.com/8x2bJ25tk1zw2Yye7B38401";
 
 type LinkItem = {
 	href: string;
@@ -71,4 +72,17 @@ const links: LinkItem[] = [
 			</div>
 		</div>
 	</main>
+
+	<aside class="payment-widget" aria-label="Payments">
+		<a
+			class="payment-link"
+			href={stripePaymentUrl}
+			target="_blank"
+			rel="noopener noreferrer"
+			aria-label="Make a Payment via Stripe"
+			title="Make a Payment"
+		>
+			<span class="payment-badge" aria-hidden="true">$</span>
+		</a>
+	</aside>
 </BaseLayout>
