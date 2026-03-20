@@ -1,0 +1,34 @@
+---
+export interface Props {
+	href: string;
+	label: string;
+	title?: string;
+	iconPath: string;
+	className?: string;
+	target?: string;
+	rel?: string;
+}
+
+const {
+	href,
+	label,
+	title = label,
+	iconPath,
+	className,
+	target,
+	rel,
+} = Astro.props;
+---
+
+<a
+	href={href}
+	class:list={["link", className]}
+	aria-label={label}
+	title={title}
+	target={target}
+	rel={rel}
+>
+	<svg class="icon" fill="currentColor" viewBox="0 0 24 24" aria-hidden="true">
+		<path d={iconPath} />
+	</svg>
+</a>
