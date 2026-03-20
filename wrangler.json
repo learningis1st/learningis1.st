@@ -1,6 +1,6 @@
 {
-	"name": "learningis1-st",
-	"compatibility_date": "2025-10-08",
+	"name": "learningis1-dot-st",
+	"compatibility_date": "2026-03-19",
 	"compatibility_flags": ["nodejs_compat"],
 	"main": "./dist/_worker.js/index.js",
 	"assets": {
