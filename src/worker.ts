@@ -23,6 +23,10 @@ export const createExports = (manifest: Parameters<typeof createCloudflareExport
 	const baseExports = createCloudflareExports(manifest);
 	return {
 		...baseExports,
+		default: {
+			...baseExports.default,
+			scheduled,
+		},
 		scheduled,
 	};
 };
