@@ -157,7 +157,8 @@ const getTrackFromResponse = (
 	return { track, positionSeconds: boundedPosition, percent };
 };
 
-export const GET: APIRoute = async ({ locals }) => {
+export const GET: APIRoute = async ({ locals, request }) => {
+	const debugMode = new URL(request.url).searchParams.get("debug") === "1";
 	const env = locals.runtime.env;
 	const baseUrl = readString(env.NAVIDROME_BASE_URL);
 	const username = readString(env.NAVIDROME_USERNAME);
@@ -168,6 +169,13 @@ export const GET: APIRoute = async ({ locals }) => {
 	const lastListenedStore = env.LAST_LISTENED_KV;
 
 	if (!baseUrl || !username || !token || !salt) {
+		const missingKeys = [
+			!baseUrl ? "NAVIDROME_BASE_URL" : null,
+			!username ? "NAVIDROME_USERNAME" : null,
+			!token ? "NAVIDROME_TOKEN" : null,
+			!salt ? "NAVIDROME_SALT" : null,
+		].filter((value): value is string => Boolean(value));
+
 		return json(
 			{
 				error: "Navidrome environment variables are missing.",
@@ -176,6 +184,7 @@ export const GET: APIRoute = async ({ locals }) => {
 				track: null,
 				lastPlayedAt: null,
 				progress: null,
+				...(debugMode ? { debug: { missingKeys } } : {}),
 			},
 			{ status: 500 },
 		);

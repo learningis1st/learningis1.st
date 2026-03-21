@@ -29,7 +29,8 @@ const isSubsonicOk = (payload: unknown) => {
 	return ((response as Record<string, unknown>).status as string | undefined) === "ok";
 };
 
-export const GET: APIRoute = async ({ locals }) => {
+export const GET: APIRoute = async ({ locals, request }) => {
+	const debugMode = new URL(request.url).searchParams.get("debug") === "1";
 	const env = locals.runtime.env;
 	const baseUrl = readString(env.NAVIDROME_BASE_URL);
 	const username = readString(env.NAVIDROME_USERNAME);
@@ -39,10 +40,18 @@ export const GET: APIRoute = async ({ locals }) => {
 	const apiVersion = readString(env.NAVIDROME_API_VERSION) || DEFAULT_API_VERSION;
 
 	if (!baseUrl || !username || !token || !salt) {
+		const missingKeys = [
+			!baseUrl ? "NAVIDROME_BASE_URL" : null,
+			!username ? "NAVIDROME_USERNAME" : null,
+			!token ? "NAVIDROME_TOKEN" : null,
+			!salt ? "NAVIDROME_SALT" : null,
+		].filter((value): value is string => Boolean(value));
+
 		return json(
 			{
 				ok: false,
 				error: "Navidrome environment variables are missing.",
+				...(debugMode ? { debug: { missingKeys } } : {}),
 			},
 			500,
 		);
