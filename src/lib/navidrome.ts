@@ -29,6 +29,15 @@ const clamp = (value: number, min: number, max: number) => Math.min(max, Math.ma
 
 const normalizeBaseUrl = (url: string) => url.replace(/\/$/, "");
 
+export const getTrackSignature = (track: NavidromeTrack) =>
+	JSON.stringify({
+		title: track.title,
+		artist: track.artist,
+		album: track.album,
+		coverArtId: track.coverArtId,
+		durationSeconds: track.durationSeconds,
+	});
+
 export const getNavidromeConfig = (env: Env): NavidromeConfig | null => {
 	const baseUrl = readString(env.NAVIDROME_BASE_URL);
 	const username = readString(env.NAVIDROME_USERNAME);

@@ -1,5 +1,10 @@
 import type { APIRoute } from "astro";
-import { buildSubsonicViewUrl, getNavidromeConfig, parseNowPlayingResponse } from "../../lib/navidrome";
+import {
+	buildSubsonicViewUrl,
+	getNavidromeConfig,
+	getTrackSignature,
+	parseNowPlayingResponse,
+} from "../../lib/navidrome";
 import type { NowPlayingPayload, StoredTrack } from "../../types/navidrome";
 
 export const prerender = false;
@@ -97,13 +102,25 @@ export const GET: APIRoute = async ({ locals }) => {
 
 		const lastPlayedAt = new Date().toISOString();
 		if (lastListenedStore) {
-			await lastListenedStore.put(
-				LAST_TRACK_KEY,
-				JSON.stringify({
-					track: nowPlaying.track,
-					lastPlayedAt,
-				} satisfies StoredTrack),
-			);
+			const previous = await lastListenedStore.get(LAST_TRACK_KEY, "json");
+			let shouldWrite = true;
+
+			if (previous && typeof previous === "object") {
+				const previousTrack = (previous as Partial<StoredTrack>).track;
+				if (previousTrack && getTrackSignature(previousTrack) === getTrackSignature(nowPlaying.track)) {
+					shouldWrite = false;
+				}
+			}
+
+			if (shouldWrite) {
+				await lastListenedStore.put(
+					LAST_TRACK_KEY,
+					JSON.stringify({
+						track: nowPlaying.track,
+						lastPlayedAt,
+					} satisfies StoredTrack),
+				);
+			}
 		}
 
 		const body: NowPlayingPayload = {

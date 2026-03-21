@@ -4,7 +4,7 @@ export interface Props {
 	refreshMs?: number;
 }
 
-const { endpoint = "/api/now-playing.json", refreshMs = 30_000 } = Astro.props;
+const { endpoint = "/api/now-playing.json", refreshMs = 10_000 } = Astro.props;
 const widgetId = `now-playing-${Math.random().toString(36).slice(2, 10)}`;
 ---
 
@@ -42,7 +42,7 @@ const widgetId = `now-playing-${Math.random().toString(36).slice(2, 10)}`;
 	}
 
 	const endpoint = root.dataset.endpoint ?? "/api/now-playing.json";
-	const refreshMs = Number(root.dataset.refreshMs ?? "30000");
+	const refreshMs = Number(root.dataset.refreshMs ?? "10000");
 
 	const statusEl = root.querySelector("[data-status]");
 	const labelEl = root.querySelector("[data-label]");
@@ -54,6 +54,29 @@ const widgetId = `now-playing-${Math.random().toString(36).slice(2, 10)}`;
 	const progressEl = root.querySelector("[data-progress]");
 	const progressBarEl = root.querySelector("[data-progress-bar]");
 	let hasLoadedOnce = false;
+	let progressTickerId = null;
+	let progressSnapshot = null;
+	let currentTrackKey = null;
+	let lastRenderedPositionSeconds = 0;
+	let latestRequestId = 0;
+
+	const clampPercent = (value) => Math.max(0, Math.min(100, value));
+
+	const getTrackKey = (track) =>
+		JSON.stringify({
+			title: track?.title ?? "",
+			artist: track?.artist ?? "",
+			album: track?.album ?? "",
+			coverArtId: track?.coverArtId ?? null,
+			durationSeconds: track?.durationSeconds ?? null,
+		});
+
+	const stopProgressTicker = () => {
+		if (progressTickerId !== null) {
+			window.clearInterval(progressTickerId);
+			progressTickerId = null;
+		}
+	};
 
 	const markReady = () => {
 		if (hasLoadedOnce) {
@@ -96,7 +119,14 @@ const widgetId = `now-playing-${Math.random().toString(36).slice(2, 10)}`;
 		metaEl.hidden = true;
 		timeEl.hidden = true;
 		coverWrapEl.hidden = true;
+		progressSnapshot = null;
+		currentTrackKey = null;
+		lastRenderedPositionSeconds = 0;
+		stopProgressTicker();
 		progressEl.hidden = true;
+		if (progressBarEl instanceof HTMLElement) {
+			progressBarEl.style.width = "0%";
+		}
 		markReady();
 	};
 
@@ -115,19 +145,74 @@ const widgetId = `now-playing-${Math.random().toString(36).slice(2, 10)}`;
 		coverEl.src = url;
 	};
 
-	const setProgress = (progress, shouldShow) => {
+	const setProgress = (percent, shouldShow) => {
 		if (!(progressEl instanceof HTMLElement) || !(progressBarEl instanceof HTMLElement)) {
 			return;
 		}
 
-		if (!shouldShow || !progress || typeof progress.percent !== "number") {
+		if (!shouldShow || typeof percent !== "number") {
 			progressEl.hidden = true;
 			progressBarEl.style.width = "0%";
 			return;
 		}
 
 		progressEl.hidden = false;
-		progressBarEl.style.width = `${Math.max(0, Math.min(100, progress.percent))}%`;
+		progressBarEl.style.width = `${clampPercent(percent)}%`;
+	};
+
+	const renderEstimatedProgress = () => {
+		if (!progressSnapshot) {
+			return;
+		}
+
+		const elapsedSeconds = Math.max(0, (Date.now() - progressSnapshot.receivedAtMs) / 1000);
+		const estimatedPosition = progressSnapshot.positionSeconds + elapsedSeconds;
+		const boundedPosition = Math.min(estimatedPosition, progressSnapshot.durationSeconds);
+		const monotonicPosition = Math.max(lastRenderedPositionSeconds, boundedPosition);
+		lastRenderedPositionSeconds = monotonicPosition;
+		const percent = (monotonicPosition / progressSnapshot.durationSeconds) * 100;
+
+		setProgress(percent, true);
+		if (percent >= 100) {
+			stopProgressTicker();
+		}
+	};
+
+	const setProgressSnapshot = (progress, durationSeconds, shouldShow, trackKey) => {
+		if (
+			!shouldShow ||
+			!progress ||
+			typeof progress.positionSeconds !== "number" ||
+			typeof durationSeconds !== "number" ||
+			durationSeconds <= 0
+		) {
+			progressSnapshot = null;
+			currentTrackKey = null;
+			lastRenderedPositionSeconds = 0;
+			stopProgressTicker();
+			setProgress(0, false);
+			return;
+		}
+
+		if (trackKey !== currentTrackKey) {
+			currentTrackKey = trackKey;
+			lastRenderedPositionSeconds = 0;
+		}
+
+		const baselinePosition = Math.max(lastRenderedPositionSeconds, Math.max(0, progress.positionSeconds));
+
+		progressSnapshot = {
+			positionSeconds: baselinePosition,
+			durationSeconds,
+			receivedAtMs: Date.now(),
+		};
+
+		renderEstimatedProgress();
+		if (progressTickerId === null) {
+			progressTickerId = window.setInterval(() => {
+				renderEstimatedProgress();
+			}, 500);
+		}
 	};
 
 	const formatRelativeTime = (isoTimestamp) => {
@@ -176,7 +261,7 @@ const widgetId = `now-playing-${Math.random().toString(36).slice(2, 10)}`;
 			metaEl.textContent = `${payload.track.artist} - ${payload.track.album}`;
 			setLabel("Now listening");
 			timeEl.hidden = true;
-			setProgress(payload.progress, true);
+			setProgressSnapshot(payload.progress, payload.track.durationSeconds, true, getTrackKey(payload.track));
 			return;
 		}
 
@@ -184,7 +269,7 @@ const widgetId = `now-playing-${Math.random().toString(36).slice(2, 10)}`;
 		trackEl.textContent = albumTitle;
 		metaEl.textContent = payload.track.artist || "Unknown artist";
 		setLabel("Last listened album");
-		setProgress(null, false);
+		setProgressSnapshot(null, null, false, null);
 		const relativeTime = formatRelativeTime(payload.lastPlayedAt);
 		if (!relativeTime) {
 			timeEl.hidden = true;
@@ -196,11 +281,16 @@ const widgetId = `now-playing-${Math.random().toString(36).slice(2, 10)}`;
 	};
 
 	const fetchNowPlaying = async () => {
+		const requestId = ++latestRequestId;
 		try {
 			const response = await fetch(endpoint, {
 				headers: { Accept: "application/json" },
 				cache: "no-store",
 			});
+
+			if (requestId !== latestRequestId) {
+				return;
+			}
 
 			if (!response.ok) {
 				setIdleState("Unable to load current track");
@@ -208,8 +298,14 @@ const widgetId = `now-playing-${Math.random().toString(36).slice(2, 10)}`;
 			}
 
 			const payload = await response.json();
+			if (requestId !== latestRequestId) {
+				return;
+			}
 			renderData(payload);
 		} catch (_error) {
+			if (requestId !== latestRequestId) {
+				return;
+			}
 			setIdleState("Unable to load current track");
 		}
 	};

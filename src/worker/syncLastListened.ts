@@ -1,4 +1,9 @@
-import { buildSubsonicViewUrl, getNavidromeConfig, parseNowPlayingResponse } from "../lib/navidrome";
+import {
+	buildSubsonicViewUrl,
+	getNavidromeConfig,
+	getTrackSignature,
+	parseNowPlayingResponse,
+} from "../lib/navidrome";
 import type { NavidromeTrack, StoredTrack } from "../types/navidrome";
 
 const LAST_TRACK_KEY = "last-track";
@@ -7,14 +12,6 @@ export type SyncResult =
 	| { status: "skipped"; reason: string }
 	| { status: "updated"; track: Pick<NavidromeTrack, "title" | "artist" | "album"> };
 
-const getTrackSignature = (track: NavidromeTrack) =>
-	JSON.stringify({
-		title: track.title,
-		artist: track.artist,
-		album: track.album,
-		coverArtId: track.coverArtId,
-		durationSeconds: track.durationSeconds,
-	});
 
 export const syncLastListened = async (env: Env): Promise<SyncResult> => {
 	if (!env.LAST_LISTENED_KV) {
