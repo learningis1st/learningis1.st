@@ -1,11 +1,7 @@
 import type { APIRoute } from "astro";
+import { buildSubsonicViewUrl, getNavidromeConfig } from "../../../../lib/navidrome";
 
 export const prerender = false;
-
-const DEFAULT_API_VERSION = "1.16.1";
-const DEFAULT_CLIENT_NAME = "learningis1.st";
-
-const normalizeBaseUrl = (url: string) => url.replace(/\/$/, "");
 const readString = (value: unknown) => (typeof value === "string" ? value.trim() : "");
 
 export const GET: APIRoute = async ({ params, locals }) => {
@@ -14,30 +10,17 @@ export const GET: APIRoute = async ({ params, locals }) => {
 		return new Response("Invalid cover art id", { status: 400 });
 	}
 
-	const env = locals.runtime.env;
-	const baseUrl = readString(env.NAVIDROME_BASE_URL);
-	const username = readString(env.NAVIDROME_USERNAME);
-	const token = readString(env.NAVIDROME_TOKEN);
-	const salt = readString(env.NAVIDROME_SALT);
-	const clientName = readString(env.NAVIDROME_CLIENT_NAME) || DEFAULT_CLIENT_NAME;
-	const apiVersion = readString(env.NAVIDROME_API_VERSION) || DEFAULT_API_VERSION;
+	const config = getNavidromeConfig(locals.runtime.env);
 
-	if (!baseUrl || !username || !token || !salt) {
+	if (!config) {
 		return new Response("Navidrome environment variables are missing.", { status: 500 });
 	}
 
-	const query = new URLSearchParams({
-		u: username,
-		t: token,
-		s: salt,
-		v: apiVersion,
-		c: clientName,
-		f: "json",
+	const endpoint = buildSubsonicViewUrl(config, "getCoverArt.view", {
 		id,
 		size: "128",
 	});
 
-	const endpoint = `${normalizeBaseUrl(baseUrl)}/rest/getCoverArt.view?${query.toString()}`;
 
 	try {
 		const upstream = await fetch(endpoint);

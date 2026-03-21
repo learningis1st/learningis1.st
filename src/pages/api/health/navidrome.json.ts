@@ -1,12 +1,7 @@
 import type { APIRoute } from "astro";
+import { buildSubsonicViewUrl, getNavidromeConfig } from "../../../lib/navidrome";
 
 export const prerender = false;
-
-const DEFAULT_API_VERSION = "1.16.1";
-const DEFAULT_CLIENT_NAME = "learningis1.st";
-
-const readString = (value: unknown) => (typeof value === "string" ? value.trim() : "");
-const normalizeBaseUrl = (url: string) => url.replace(/\/$/, "");
 
 const json = (body: Record<string, unknown>, status = 200) =>
 	new Response(JSON.stringify(body), {
@@ -31,15 +26,9 @@ const isSubsonicOk = (payload: unknown) => {
 };
 
 export const GET: APIRoute = async ({ locals }) => {
-	const env = locals.runtime.env;
-	const baseUrl = readString(env.NAVIDROME_BASE_URL);
-	const username = readString(env.NAVIDROME_USERNAME);
-	const token = readString(env.NAVIDROME_TOKEN);
-	const salt = readString(env.NAVIDROME_SALT);
-	const clientName = readString(env.NAVIDROME_CLIENT_NAME) || DEFAULT_CLIENT_NAME;
-	const apiVersion = readString(env.NAVIDROME_API_VERSION) || DEFAULT_API_VERSION;
+	const config = getNavidromeConfig(locals.runtime.env);
 
-	if (!baseUrl || !username || !token || !salt) {
+	if (!config) {
 		return json(
 			{
 				ok: false,
@@ -49,16 +38,7 @@ export const GET: APIRoute = async ({ locals }) => {
 		);
 	}
 
-	const query = new URLSearchParams({
-		u: username,
-		t: token,
-		s: salt,
-		v: apiVersion,
-		c: clientName,
-		f: "json",
-	});
-
-	const endpoint = `${normalizeBaseUrl(baseUrl)}/rest/ping.view?${query.toString()}`;
+	const endpoint = buildSubsonicViewUrl(config, "ping.view");
 	const startedAt = Date.now();
 
 	try {
