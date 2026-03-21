@@ -25,7 +25,7 @@ const widgetId = `now-playing-${Math.random().toString(36).slice(2, 10)}`;
 			<img class="now-playing__cover" data-cover src="data:," alt="Album artwork" loading="lazy" decoding="async" />
 		</div>
 		<div class="now-playing__text">
-			<p class="now-playing__status" data-status>Loading...</p>
+			<p class="now-playing__status" data-status hidden>Loading...</p>
 			<p class="now-playing__track" data-track hidden></p>
 			<p class="now-playing__meta" data-meta hidden></p>
 		</div>
@@ -58,6 +58,7 @@ const widgetId = `now-playing-${Math.random().toString(36).slice(2, 10)}`;
 	let hasLoadedOnce = false;
 	let progressTickerId = null;
 	let fetchTimerId = null;
+	let loadingTimeoutId = null;
 	let currentTrackKey = null;
 	let targetPositionSeconds = 0;
 	let visualPositionSeconds = 0;
@@ -102,6 +103,13 @@ const widgetId = `now-playing-${Math.random().toString(36).slice(2, 10)}`;
 		}
 	};
 
+	const clearLoadingTimeout = () => {
+		if (loadingTimeoutId !== null) {
+			window.clearTimeout(loadingTimeoutId);
+			loadingTimeoutId = null;
+		}
+	};
+
 	const scheduleNextFetch = (delayMs) => {
 		clearFetchTimer();
 		if (!document.contains(root)) return;
@@ -115,6 +123,17 @@ const widgetId = `now-playing-${Math.random().toString(36).slice(2, 10)}`;
 		if (hasLoadedOnce) return;
 		hasLoadedOnce = true;
 		root.dataset.state = "ready";
+	};
+
+	const showLoadingWithDelay = () => {
+		clearLoadingTimeout();
+		if (!(statusEl instanceof HTMLElement)) return;
+		
+		loadingTimeoutId = window.setTimeout(() => {
+			statusEl.textContent = "Loading...";
+			statusEl.hidden = false;
+			loadingTimeoutId = null;
+		}, 400); // 400ms delay before showing loading
 	};
 
 	const setTextContent = (el, text) => {
@@ -292,6 +311,8 @@ const widgetId = `now-playing-${Math.random().toString(36).slice(2, 10)}`;
 			return;
 		}
 
+		clearLoadingTimeout();
+
 		if (!payload || !payload.track) {
 			setIdleState("Not listening right now");
 			return;
@@ -334,6 +355,8 @@ const widgetId = `now-playing-${Math.random().toString(36).slice(2, 10)}`;
 		if (!document.contains(root)) return;
 
 		const requestId = ++latestRequestId;
+		showLoadingWithDelay();
+
 		try {
 			const response = await fetch(endpoint, {
 				headers: { Accept: "application/json" },
@@ -343,6 +366,7 @@ const widgetId = `now-playing-${Math.random().toString(36).slice(2, 10)}`;
 			if (requestId !== latestRequestId) return;
 
 			if (!response.ok) {
+				clearLoadingTimeout();
 				setIdleState("Unable to load current track");
 				scheduleNextFetch(refreshMs);
 				return;
@@ -380,6 +404,7 @@ const widgetId = `now-playing-${Math.random().toString(36).slice(2, 10)}`;
 			scheduleNextFetch(nextDelay);
 		} catch (_error) {
 			if (requestId !== latestRequestId) return;
+			clearLoadingTimeout();
 			setIdleState("Unable to load current track");
 			scheduleNextFetch(refreshMs);
 		}
