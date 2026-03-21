@@ -54,6 +54,7 @@ const widgetId = `now-playing-${Math.random().toString(36).slice(2, 10)}`;
 	const coverEl = root.querySelector("[data-cover]");
 	const progressEl = root.querySelector("[data-progress]");
 	const progressBarEl = root.querySelector("[data-progress-bar]");
+
 	let hasLoadedOnce = false;
 	let progressTickerId = null;
 	let fetchTimerId = null;
@@ -103,28 +104,21 @@ const widgetId = `now-playing-${Math.random().toString(36).slice(2, 10)}`;
 
 	const scheduleNextFetch = (delayMs) => {
 		clearFetchTimer();
+		if (!document.contains(root)) return;
+
 		fetchTimerId = window.setTimeout(() => {
 			void fetchNowPlaying();
 		}, Math.max(1_000, delayMs));
 	};
 
 	const markReady = () => {
-		if (hasLoadedOnce) {
-			return;
-		}
-
+		if (hasLoadedOnce) return;
 		hasLoadedOnce = true;
 		root.dataset.state = "ready";
 	};
 
 	const setTextContent = (el, text) => {
-		if (!(el instanceof HTMLElement)) {
-			return;
-		}
-
-		if (el.textContent === text) {
-			return;
-		}
+		if (!(el instanceof HTMLElement) || el.textContent === text) return;
 
 		el.classList.add("transitioning");
 		setTimeout(() => {
@@ -134,14 +128,9 @@ const widgetId = `now-playing-${Math.random().toString(36).slice(2, 10)}`;
 	};
 
 	const setIdleState = (message) => {
-		if (
-			!(statusEl instanceof HTMLElement) ||
-			!(trackEl instanceof HTMLElement) ||
-			!(metaEl instanceof HTMLElement) ||
-			!(timeEl instanceof HTMLElement) ||
-			!(coverWrapEl instanceof HTMLElement) ||
-			!(progressEl instanceof HTMLElement)
-		) {
+		if (!(statusEl instanceof HTMLElement) || !(trackEl instanceof HTMLElement) ||
+			!(metaEl instanceof HTMLElement) || !(timeEl instanceof HTMLElement) ||
+			!(coverWrapEl instanceof HTMLElement) || !(progressEl instanceof HTMLElement)) {
 			return;
 		}
 
@@ -152,9 +141,11 @@ const widgetId = `now-playing-${Math.random().toString(36).slice(2, 10)}`;
 		metaEl.hidden = true;
 		timeEl.hidden = true;
 		coverWrapEl.hidden = true;
+
 		resetProgressState();
 		stopProgressTicker();
 		progressEl.hidden = true;
+
 		if (progressBarEl instanceof HTMLElement) {
 			progressBarEl.style.transform = "scaleX(0)";
 		}
@@ -162,9 +153,7 @@ const widgetId = `now-playing-${Math.random().toString(36).slice(2, 10)}`;
 	};
 
 	const setCover = (url) => {
-		if (!(coverWrapEl instanceof HTMLElement) || !(coverEl instanceof HTMLImageElement)) {
-			return;
-		}
+		if (!(coverWrapEl instanceof HTMLElement) || !(coverEl instanceof HTMLImageElement)) return;
 
 		if (!url) {
 			coverWrapEl.classList.add("transitioning");
@@ -176,33 +165,25 @@ const widgetId = `now-playing-${Math.random().toString(36).slice(2, 10)}`;
 			return;
 		}
 
-		if (coverEl.getAttribute("src") === url) {
-			return;
-		}
+		if (coverEl.getAttribute("src") === url) return;
 
 		coverWrapEl.classList.add("transitioning");
-
 		setTimeout(() => {
 			coverWrapEl.hidden = false;
-
 			coverEl.onload = () => {
 				coverWrapEl.classList.remove("transitioning");
 				coverEl.onload = null;
 			};
-
 			coverEl.onerror = () => {
 				coverWrapEl.classList.remove("transitioning");
 				coverEl.onerror = null;
 			};
-
 			coverEl.src = url;
 		}, 150);
 	};
 
 	const setProgress = (percent, shouldShow) => {
-		if (!(progressEl instanceof HTMLElement) || !(progressBarEl instanceof HTMLElement)) {
-			return;
-		}
+		if (!(progressEl instanceof HTMLElement) || !(progressBarEl instanceof HTMLElement)) return;
 
 		if (!shouldShow || typeof percent !== "number") {
 			progressEl.hidden = true;
@@ -215,9 +196,7 @@ const widgetId = `now-playing-${Math.random().toString(36).slice(2, 10)}`;
 	};
 
 	const renderEstimatedProgress = () => {
-		if (trackDurationSeconds <= 0) {
-			return;
-		}
+		if (trackDurationSeconds <= 0) return;
 
 		const now = Date.now();
 		const elapsedSeconds = Math.max(0, (now - lastTickTime) / 1000);
@@ -243,6 +222,11 @@ const widgetId = `now-playing-${Math.random().toString(36).slice(2, 10)}`;
 	};
 
 	const tickProgress = () => {
+		if (!document.contains(root)) {
+			stopProgressTicker();
+			return;
+		}
+
 		renderEstimatedProgress();
 		if (progressTickerId !== null) {
 			progressTickerId = window.requestAnimationFrame(tickProgress);
@@ -250,22 +234,14 @@ const widgetId = `now-playing-${Math.random().toString(36).slice(2, 10)}`;
 	};
 
 	const startProgressTicker = () => {
-		if (progressTickerId !== null) {
-			return;
-		}
-
+		if (progressTickerId !== null) return;
 		lastTickTime = Date.now();
 		progressTickerId = window.requestAnimationFrame(tickProgress);
 	};
 
 	const setProgressSnapshot = (progress, durationSeconds, shouldShow, trackKey) => {
-		if (
-			!shouldShow ||
-			!progress ||
-			typeof progress.positionSeconds !== "number" ||
-			typeof durationSeconds !== "number" ||
-			durationSeconds <= 0
-		) {
+		if (!shouldShow || !progress || typeof progress.positionSeconds !== "number" ||
+			typeof durationSeconds !== "number" || durationSeconds <= 0) {
 			resetProgressState();
 			stopProgressTicker();
 			setProgress(0, false);
@@ -298,31 +274,21 @@ const widgetId = `now-playing-${Math.random().toString(36).slice(2, 10)}`;
 
 	const formatRelativeTime = (isoTimestamp) => {
 		const timestamp = Date.parse(isoTimestamp);
-		if (Number.isNaN(timestamp)) {
-			return "";
-		}
+		if (Number.isNaN(timestamp)) return "";
 
 		const minutes = Math.max(1, Math.floor((Date.now() - timestamp) / 60_000));
-		if (minutes < 60) {
-			return `${minutes}m ago`;
-		}
+		if (minutes < 60) return `${minutes}m ago`;
 
 		const hours = Math.floor(minutes / 60);
-		if (hours < 24) {
-			return `${hours}h ago`;
-		}
+		if (hours < 24) return `${hours}h ago`;
 
 		const days = Math.floor(hours / 24);
 		return `${days}d ago`;
 	};
 
 	const renderData = (payload) => {
-		if (
-			!(statusEl instanceof HTMLElement) ||
-			!(trackEl instanceof HTMLElement) ||
-			!(metaEl instanceof HTMLElement) ||
-			!(timeEl instanceof HTMLElement)
-		) {
+		if (!(statusEl instanceof HTMLElement) || !(trackEl instanceof HTMLElement) ||
+			!(metaEl instanceof HTMLElement) || !(timeEl instanceof HTMLElement)) {
 			return;
 		}
 
@@ -337,20 +303,23 @@ const widgetId = `now-playing-${Math.random().toString(36).slice(2, 10)}`;
 		setCover(payload.track.coverArtUrl);
 		markReady();
 
+		const trackTitle = payload.track.title || "Unknown track";
+		const trackMeta = `${payload.track.artist || "Unknown artist"} - ${payload.track.album || "Unknown album"}`;
+
 		if (payload.source === "playing") {
-			setTextContent(trackEl, payload.track.title);
-			setTextContent(metaEl, `${payload.track.artist} - ${payload.track.album}`);
+			setTextContent(trackEl, trackTitle);
+			setTextContent(metaEl, trackMeta);
 			setTextContent(labelEl, "Now listening");
 			timeEl.hidden = true;
 			setProgressSnapshot(payload.progress, payload.track.durationSeconds, true, getTrackKey(payload.track));
 			return;
 		}
 
-		const albumTitle = payload.track.album || "Unknown album";
-		setTextContent(trackEl, albumTitle);
-		setTextContent(metaEl, payload.track.artist || "Unknown artist");
-		setTextContent(labelEl, "Last listened album");
+		setTextContent(trackEl, trackTitle);
+		setTextContent(metaEl, trackMeta);
+		setTextContent(labelEl, "Last listened");
 		setProgressSnapshot(null, null, false, null);
+
 		const relativeTime = formatRelativeTime(payload.lastPlayedAt);
 		if (!relativeTime) {
 			timeEl.hidden = true;
@@ -362,6 +331,8 @@ const widgetId = `now-playing-${Math.random().toString(36).slice(2, 10)}`;
 	};
 
 	const fetchNowPlaying = async () => {
+		if (!document.contains(root)) return;
+
 		const requestId = ++latestRequestId;
 		try {
 			const response = await fetch(endpoint, {
@@ -369,9 +340,7 @@ const widgetId = `now-playing-${Math.random().toString(36).slice(2, 10)}`;
 				cache: "no-store",
 			});
 
-			if (requestId !== latestRequestId) {
-				return;
-			}
+			if (requestId !== latestRequestId) return;
 
 			if (!response.ok) {
 				setIdleState("Unable to load current track");
@@ -380,11 +349,9 @@ const widgetId = `now-playing-${Math.random().toString(36).slice(2, 10)}`;
 			}
 
 			const payload = await response.json();
-			if (requestId !== latestRequestId) {
-				return;
-			}
-			renderData(payload);
+			if (requestId !== latestRequestId) return;
 
+			renderData(payload);
 			let nextDelay = idleRefreshMs;
 
 			if (payload?.isPlaying) {
@@ -399,7 +366,6 @@ const widgetId = `now-playing-${Math.random().toString(36).slice(2, 10)}`;
 					// Unsynced mode narrows uncertainty window as we approach the next boundary.
 					const stallPoint = (lastKnownMinutesAgo + 1) * 60;
 					const secondsToStall = Math.max(0, stallPoint - targetPositionSeconds);
-
 					if (secondsToStall > 0) {
 						nextDelay = (secondsToStall / 2) * 1000;
 					} else {
@@ -413,9 +379,7 @@ const widgetId = `now-playing-${Math.random().toString(36).slice(2, 10)}`;
 
 			scheduleNextFetch(nextDelay);
 		} catch (_error) {
-			if (requestId !== latestRequestId) {
-				return;
-			}
+			if (requestId !== latestRequestId) return;
 			setIdleState("Unable to load current track");
 			scheduleNextFetch(refreshMs);
 		}
@@ -423,4 +387,3 @@ const widgetId = `now-playing-${Math.random().toString(36).slice(2, 10)}`;
 
 	void fetchNowPlaying();
 </script>
-
