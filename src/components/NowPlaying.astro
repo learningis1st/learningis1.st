@@ -43,6 +43,7 @@ const widgetId = `now-playing-${Math.random().toString(36).slice(2, 10)}`;
 
 	const endpoint = root.dataset.endpoint ?? "/api/now-playing.json";
 	const refreshMs = Number(root.dataset.refreshMs ?? "10000");
+	const idleRefreshMs = 30_000;
 
 	const statusEl = root.querySelector("[data-status]");
 	const labelEl = root.querySelector("[data-label]");
@@ -55,6 +56,7 @@ const widgetId = `now-playing-${Math.random().toString(36).slice(2, 10)}`;
 	const progressBarEl = root.querySelector("[data-progress-bar]");
 	let hasLoadedOnce = false;
 	let progressTickerId = null;
+	let fetchTimerId = null;
 	let progressSnapshot = null;
 	let currentTrackKey = null;
 	let lastRenderedPositionSeconds = 0;
@@ -76,6 +78,20 @@ const widgetId = `now-playing-${Math.random().toString(36).slice(2, 10)}`;
 			window.clearInterval(progressTickerId);
 			progressTickerId = null;
 		}
+	};
+
+	const clearFetchTimer = () => {
+		if (fetchTimerId !== null) {
+			window.clearTimeout(fetchTimerId);
+			fetchTimerId = null;
+		}
+	};
+
+	const scheduleNextFetch = (delayMs) => {
+		clearFetchTimer();
+		fetchTimerId = window.setTimeout(() => {
+			void fetchNowPlaying();
+		}, Math.max(1_000, delayMs));
 	};
 
 	const markReady = () => {
@@ -294,6 +310,7 @@ const widgetId = `now-playing-${Math.random().toString(36).slice(2, 10)}`;
 
 			if (!response.ok) {
 				setIdleState("Unable to load current track");
+				scheduleNextFetch(refreshMs);
 				return;
 			}
 
@@ -302,17 +319,16 @@ const widgetId = `now-playing-${Math.random().toString(36).slice(2, 10)}`;
 				return;
 			}
 			renderData(payload);
+			scheduleNextFetch(payload?.isPlaying ? refreshMs : idleRefreshMs);
 		} catch (_error) {
 			if (requestId !== latestRequestId) {
 				return;
 			}
 			setIdleState("Unable to load current track");
+			scheduleNextFetch(refreshMs);
 		}
 	};
 
 	void fetchNowPlaying();
-	window.setInterval(() => {
-		void fetchNowPlaying();
-	}, refreshMs);
 </script>
 
