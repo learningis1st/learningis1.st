@@ -17,7 +17,7 @@ const widgetId = `now-playing-${Math.random().toString(36).slice(2, 10)}`;
 	data-refresh-ms={String(refreshMs)}
 >
 	<div class="now-playing__header">
-		<p class="now-playing__label" data-label>Listening</p>
+		<p class="now-playing__label" data-label>Now Listening</p>
 		<p class="now-playing__time" data-time hidden></p>
 	</div>
 	<div class="now-playing__content">
@@ -146,6 +146,11 @@ const widgetId = `now-playing-${Math.random().toString(36).slice(2, 10)}`;
 		}, 150);
 	};
 
+	const setLabelText = (text) => {
+		if (!(labelEl instanceof HTMLElement) || labelEl.textContent === text) return;
+		labelEl.textContent = text;
+	};
+
 	const setIdleState = (message) => {
 		if (!(statusEl instanceof HTMLElement) || !(trackEl instanceof HTMLElement) ||
 			!(metaEl instanceof HTMLElement) || !(timeEl instanceof HTMLElement) ||
@@ -153,7 +158,7 @@ const widgetId = `now-playing-${Math.random().toString(36).slice(2, 10)}`;
 			return;
 		}
 
-		setTextContent(labelEl, "Listening");
+		setLabelText("Now Listening");
 		statusEl.textContent = message;
 		statusEl.hidden = false;
 		trackEl.hidden = true;
@@ -330,7 +335,7 @@ const widgetId = `now-playing-${Math.random().toString(36).slice(2, 10)}`;
 		if (payload.source === "playing") {
 			setTextContent(trackEl, trackTitle);
 			setTextContent(metaEl, trackMeta);
-			setTextContent(labelEl, "Now listening");
+			setLabelText("Now listening");
 			timeEl.hidden = true;
 			setProgressSnapshot(payload.progress, payload.track.durationSeconds, true, getTrackKey(payload.track));
 			return;
@@ -338,7 +343,7 @@ const widgetId = `now-playing-${Math.random().toString(36).slice(2, 10)}`;
 
 		setTextContent(trackEl, payload.track.album || "Unknown album");
 		setTextContent(metaEl, payload.track.artist || "Unknown artist");
-		setTextContent(labelEl, "Last listened album");
+		setLabelText("Last listened album");
 		setProgressSnapshot(null, null, false, null);
 
 		const relativeTime = formatRelativeTime(payload.lastPlayedAt);
