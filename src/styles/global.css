@@ -118,6 +118,17 @@ h1 {
 	}
 }
 
+@keyframes fadeInScale {
+	from {
+		opacity: 0;
+		transform: scale(0.8);
+	}
+	to {
+		opacity: 1;
+		transform: scale(1);
+	}
+}
+
 @keyframes now-playing-pulse {
 	0%,
 	100% {
@@ -254,7 +265,14 @@ h1 {
 	text-decoration: none;
 	transition: all 0.2s ease;
 	cursor: pointer;
+	animation: fadeInScale 0.5s ease-out forwards;
+	opacity: 0;
 }
+
+.link:nth-child(1) { animation-delay: 0.3s; }
+.link:nth-child(2) { animation-delay: 0.4s; }
+.link:nth-child(3) { animation-delay: 0.5s; }
+.link:nth-child(4) { animation-delay: 0.6s; }
 
 .link:hover {
 	background: var(--accent);
