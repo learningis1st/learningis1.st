@@ -64,6 +64,7 @@ const widgetId = `now-playing-${Math.random().toString(36).slice(2, 10)}`;
 	let lastTickTime = Date.now();
 	let trackDurationSeconds = 0;
 	let latestRequestId = 0;
+	let isSynced = false;
 
 	const clampPercent = (value) => Math.max(0, Math.min(100, value));
 
@@ -90,6 +91,7 @@ const widgetId = `now-playing-${Math.random().toString(36).slice(2, 10)}`;
 		lastTickTime = Date.now();
 		trackDurationSeconds = 0;
 		currentTrackKey = null;
+		isSynced = false;
 	};
 
 	const clearFetchTimer = () => {
@@ -246,6 +248,7 @@ const widgetId = `now-playing-${Math.random().toString(36).slice(2, 10)}`;
 		if (trackKey !== currentTrackKey) {
 			currentTrackKey = trackKey;
 			lastKnownMinutesAgo = incomingMinutesAgo;
+			isSynced = false;
 
 			const midpointGuess = incomingMinutesAgo === 0 ? 0 : rawSeconds + 30;
 			targetPositionSeconds = Math.min(midpointGuess, trackDurationSeconds);
@@ -255,6 +258,7 @@ const widgetId = `now-playing-${Math.random().toString(36).slice(2, 10)}`;
 			// Boundary detection: once the minute bucket changes, we know the exact snapped position.
 			targetPositionSeconds = Math.min(incomingMinutesAgo * 60, trackDurationSeconds);
 			lastKnownMinutesAgo = incomingMinutesAgo;
+			isSynced = true;
 		}
 
 		renderEstimatedProgress();
@@ -349,7 +353,34 @@ const widgetId = `now-playing-${Math.random().toString(36).slice(2, 10)}`;
 				return;
 			}
 			renderData(payload);
-			scheduleNextFetch(payload?.isPlaying ? refreshMs : idleRefreshMs);
+
+			let nextDelay = idleRefreshMs;
+
+			if (payload?.isPlaying) {
+				const secondsToNextBoundary = ((lastKnownMinutesAgo + 1) * 60) - targetPositionSeconds;
+				const secondsToEnd = Math.max(0, trackDurationSeconds - targetPositionSeconds);
+
+				if (isSynced) {
+					// Once synced to a bucket flip, hit just after the next expected boundary/end.
+					const nextEventSeconds = Math.min(secondsToNextBoundary, secondsToEnd);
+					nextDelay = (nextEventSeconds + 1.5) * 1000;
+				} else {
+					// Unsynced mode narrows uncertainty window as we approach the next boundary.
+					const stallPoint = (lastKnownMinutesAgo + 1) * 60;
+					const secondsToStall = Math.max(0, stallPoint - targetPositionSeconds);
+
+					if (secondsToStall > 0) {
+						nextDelay = (secondsToStall / 2) * 1000;
+					} else {
+						nextDelay = 5_000;
+					}
+				}
+
+				nextDelay = Math.min(refreshMs, nextDelay);
+				nextDelay = Math.max(2_000, nextDelay);
+			}
+
+			scheduleNextFetch(nextDelay);
 		} catch (_error) {
 			if (requestId !== latestRequestId) {
 				return;
