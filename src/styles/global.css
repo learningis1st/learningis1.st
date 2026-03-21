@@ -74,6 +74,8 @@ h1 {
 }
 
 .now-playing {
+	--now-playing-progress-track: color-mix(in srgb, var(--border) 78%, transparent);
+	--now-playing-progress-fill: color-mix(in srgb, var(--text) 34%, var(--border));
 	margin: 0 auto 1.75rem;
 	padding: 0.9rem;
 	max-width: 360px;
@@ -226,7 +228,7 @@ h1 {
 .now-playing__progress {
 	height: 0.24rem;
 	margin-top: 0.7rem;
-	background: color-mix(in srgb, var(--border) 65%, transparent);
+	background: var(--now-playing-progress-track);
 	border-radius: 999px;
 	overflow: hidden;
 }
@@ -234,7 +236,7 @@ h1 {
 .now-playing__progress-bar {
 	height: 100%;
 	width: 0;
-	background: var(--accent);
+	background: var(--now-playing-progress-fill);
 	transition: width 0.25s ease;
 }
 
