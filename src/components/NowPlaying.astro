@@ -315,9 +315,9 @@ const widgetId = `now-playing-${Math.random().toString(36).slice(2, 10)}`;
 			return;
 		}
 
-		setTextContent(trackEl, trackTitle);
-		setTextContent(metaEl, trackMeta);
-		setTextContent(labelEl, "Last listened");
+		setTextContent(trackEl, payload.track.album || "Unknown album");
+		setTextContent(metaEl, payload.track.artist || "Unknown artist");
+		setTextContent(labelEl, "Last listened album");
 		setProgressSnapshot(null, null, false, null);
 
 		const relativeTime = formatRelativeTime(payload.lastPlayedAt);
