@@ -45,6 +45,8 @@ The widget fetches data from `GET /api/now-playing.json`.
 It also uses `GET /api/navidrome/cover-art/:id` as an authenticated image proxy.
 For setup/debugging, use `GET /api/health/navidrome.json` to validate Subsonic auth (`u`, `t`, `s`).
 
+`LAST_LISTENED_KV` is also refreshed by a cron trigger (`*/1 * * * *`) so history continues updating even if nobody opens the site.
+
 To enable "last listened" fallback, bind a KV namespace:
 
 ```bash

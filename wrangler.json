@@ -19,6 +19,9 @@
 		"binding": "ASSETS"
 	},
 	"workers_dev": false,
+	"triggers": {
+		"crons": ["*/1 * * * *"]
+	},
 	"observability": {
 		"enabled": true
 	},
