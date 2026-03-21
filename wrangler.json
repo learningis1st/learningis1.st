@@ -20,7 +20,7 @@
 	},
 	"workers_dev": false,
 	"triggers": {
-		"crons": ["*/2 * * * *"]
+		"crons": ["*/4 * * * *"]
 	},
 	"observability": {
 		"enabled": true
