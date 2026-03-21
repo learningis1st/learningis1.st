@@ -163,7 +163,7 @@ const widgetId = `now-playing-${Math.random().toString(36).slice(2, 10)}`;
 		const albumTitle = payload.track.album || "Unknown album";
 		trackEl.textContent = albumTitle;
 		metaEl.textContent = payload.track.artist || "Unknown artist";
-		setLabel("Last listened");
+		setLabel("Last listened album");
 		setProgress(null, false);
 		const relativeTime = formatRelativeTime(payload.lastPlayedAt);
 		if (!relativeTime) {
