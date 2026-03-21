@@ -177,6 +177,13 @@ h1 {
 	display: block;
 }
 
+.now-playing__label,
+.now-playing__track,
+.now-playing__meta,
+.now-playing__cover-wrap {
+	transition: opacity 0.15s ease-in-out;
+}
+
 .now-playing__label {
 	font-size: 0.72rem;
 	font-weight: 700;
@@ -184,10 +191,9 @@ h1 {
 	text-transform: uppercase;
 	color: var(--text-light);
 	margin-bottom: 0.3rem;
-	transition: opacity 0.3s ease-out;
 }
 
-.now-playing__label.transitioning {
+.transitioning {
 	opacity: 0;
 }
 
@@ -235,9 +241,11 @@ h1 {
 
 .now-playing__progress-bar {
 	height: 100%;
-	width: 0;
+	width: 100%;
 	background: var(--now-playing-progress-fill);
-	transition: width 0.25s ease;
+	transform: scaleX(0);
+	transform-origin: left center;
+	will-change: transform;
 }
 
 @media (prefers-reduced-motion: reduce) {

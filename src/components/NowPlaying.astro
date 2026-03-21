@@ -79,7 +79,7 @@ const widgetId = `now-playing-${Math.random().toString(36).slice(2, 10)}`;
 
 	const stopProgressTicker = () => {
 		if (progressTickerId !== null) {
-			window.clearInterval(progressTickerId);
+			window.cancelAnimationFrame(progressTickerId);
 			progressTickerId = null;
 		}
 	};
@@ -117,17 +117,20 @@ const widgetId = `now-playing-${Math.random().toString(36).slice(2, 10)}`;
 		root.dataset.state = "ready";
 	};
 
-	const setLabel = (label) => {
-		if (labelEl instanceof HTMLElement) {
-			if (labelEl.textContent === label) {
-				return;
-			}
-			labelEl.classList.add("transitioning");
-			setTimeout(() => {
-				labelEl.textContent = label;
-				labelEl.classList.remove("transitioning");
-			}, 150);
+	const setTextContent = (el, text) => {
+		if (!(el instanceof HTMLElement)) {
+			return;
 		}
+
+		if (el.textContent === text) {
+			return;
+		}
+
+		el.classList.add("transitioning");
+		setTimeout(() => {
+			el.textContent = text;
+			el.classList.remove("transitioning");
+		}, 150);
 	};
 
 	const setIdleState = (message) => {
@@ -142,7 +145,7 @@ const widgetId = `now-playing-${Math.random().toString(36).slice(2, 10)}`;
 			return;
 		}
 
-		setLabel("Listening");
+		setTextContent(labelEl, "Listening");
 		statusEl.textContent = message;
 		statusEl.hidden = false;
 		trackEl.hidden = true;
@@ -153,7 +156,7 @@ const widgetId = `now-playing-${Math.random().toString(36).slice(2, 10)}`;
 		stopProgressTicker();
 		progressEl.hidden = true;
 		if (progressBarEl instanceof HTMLElement) {
-			progressBarEl.style.width = "0%";
+			progressBarEl.style.transform = "scaleX(0)";
 		}
 		markReady();
 	};
@@ -164,13 +167,36 @@ const widgetId = `now-playing-${Math.random().toString(36).slice(2, 10)}`;
 		}
 
 		if (!url) {
-			coverWrapEl.hidden = true;
-			coverEl.removeAttribute("src");
+			coverWrapEl.classList.add("transitioning");
+			setTimeout(() => {
+				coverWrapEl.hidden = true;
+				coverEl.removeAttribute("src");
+				coverWrapEl.classList.remove("transitioning");
+			}, 150);
 			return;
 		}
 
-		coverWrapEl.hidden = false;
-		coverEl.src = url;
+		if (coverEl.getAttribute("src") === url) {
+			return;
+		}
+
+		coverWrapEl.classList.add("transitioning");
+
+		setTimeout(() => {
+			coverWrapEl.hidden = false;
+
+			coverEl.onload = () => {
+				coverWrapEl.classList.remove("transitioning");
+				coverEl.onload = null;
+			};
+
+			coverEl.onerror = () => {
+				coverWrapEl.classList.remove("transitioning");
+				coverEl.onerror = null;
+			};
+
+			coverEl.src = url;
+		}, 150);
 	};
 
 	const setProgress = (percent, shouldShow) => {
@@ -180,12 +206,12 @@ const widgetId = `now-playing-${Math.random().toString(36).slice(2, 10)}`;
 
 		if (!shouldShow || typeof percent !== "number") {
 			progressEl.hidden = true;
-			progressBarEl.style.width = "0%";
+			progressBarEl.style.transform = "scaleX(0)";
 			return;
 		}
 
 		progressEl.hidden = false;
-		progressBarEl.style.width = `${clampPercent(percent)}%`;
+		progressBarEl.style.transform = `scaleX(${clampPercent(percent) / 100})`;
 	};
 
 	const renderEstimatedProgress = () => {
@@ -216,15 +242,20 @@ const widgetId = `now-playing-${Math.random().toString(36).slice(2, 10)}`;
 		}
 	};
 
+	const tickProgress = () => {
+		renderEstimatedProgress();
+		if (progressTickerId !== null) {
+			progressTickerId = window.requestAnimationFrame(tickProgress);
+		}
+	};
+
 	const startProgressTicker = () => {
 		if (progressTickerId !== null) {
 			return;
 		}
 
 		lastTickTime = Date.now();
-		progressTickerId = window.setInterval(() => {
-			renderEstimatedProgress();
-		}, 33);
+		progressTickerId = window.requestAnimationFrame(tickProgress);
 	};
 
 	const setProgressSnapshot = (progress, durationSeconds, shouldShow, trackKey) => {
@@ -307,18 +338,18 @@ const widgetId = `now-playing-${Math.random().toString(36).slice(2, 10)}`;
 		markReady();
 
 		if (payload.source === "playing") {
-			trackEl.textContent = payload.track.title;
-			metaEl.textContent = `${payload.track.artist} - ${payload.track.album}`;
-			setLabel("Now listening");
+			setTextContent(trackEl, payload.track.title);
+			setTextContent(metaEl, `${payload.track.artist} - ${payload.track.album}`);
+			setTextContent(labelEl, "Now listening");
 			timeEl.hidden = true;
 			setProgressSnapshot(payload.progress, payload.track.durationSeconds, true, getTrackKey(payload.track));
 			return;
 		}
 
 		const albumTitle = payload.track.album || "Unknown album";
-		trackEl.textContent = albumTitle;
-		metaEl.textContent = payload.track.artist || "Unknown artist";
-		setLabel("Last listened album");
+		setTextContent(trackEl, albumTitle);
+		setTextContent(metaEl, payload.track.artist || "Unknown artist");
+		setTextContent(labelEl, "Last listened album");
 		setProgressSnapshot(null, null, false, null);
 		const relativeTime = formatRelativeTime(payload.lastPlayedAt);
 		if (!relativeTime) {
