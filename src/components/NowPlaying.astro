@@ -57,9 +57,12 @@ const widgetId = `now-playing-${Math.random().toString(36).slice(2, 10)}`;
 	let hasLoadedOnce = false;
 	let progressTickerId = null;
 	let fetchTimerId = null;
-	let progressSnapshot = null;
 	let currentTrackKey = null;
-	let lastRenderedPositionSeconds = 0;
+	let targetPositionSeconds = 0;
+	let visualPositionSeconds = 0;
+	let lastKnownMinutesAgo = 0;
+	let lastTickTime = Date.now();
+	let trackDurationSeconds = 0;
 	let latestRequestId = 0;
 
 	const clampPercent = (value) => Math.max(0, Math.min(100, value));
@@ -78,6 +81,15 @@ const widgetId = `now-playing-${Math.random().toString(36).slice(2, 10)}`;
 			window.clearInterval(progressTickerId);
 			progressTickerId = null;
 		}
+	};
+
+	const resetProgressState = () => {
+		targetPositionSeconds = 0;
+		visualPositionSeconds = 0;
+		lastKnownMinutesAgo = 0;
+		lastTickTime = Date.now();
+		trackDurationSeconds = 0;
+		currentTrackKey = null;
 	};
 
 	const clearFetchTimer = () => {
@@ -135,9 +147,7 @@ const widgetId = `now-playing-${Math.random().toString(36).slice(2, 10)}`;
 		metaEl.hidden = true;
 		timeEl.hidden = true;
 		coverWrapEl.hidden = true;
-		progressSnapshot = null;
-		currentTrackKey = null;
-		lastRenderedPositionSeconds = 0;
+		resetProgressState();
 		stopProgressTicker();
 		progressEl.hidden = true;
 		if (progressBarEl instanceof HTMLElement) {
@@ -177,21 +187,42 @@ const widgetId = `now-playing-${Math.random().toString(36).slice(2, 10)}`;
 	};
 
 	const renderEstimatedProgress = () => {
-		if (!progressSnapshot) {
+		if (trackDurationSeconds <= 0) {
 			return;
 		}
 
-		const elapsedSeconds = Math.max(0, (Date.now() - progressSnapshot.receivedAtMs) / 1000);
-		const estimatedPosition = progressSnapshot.positionSeconds + elapsedSeconds;
-		const boundedPosition = Math.min(estimatedPosition, progressSnapshot.durationSeconds);
-		const monotonicPosition = Math.max(lastRenderedPositionSeconds, boundedPosition);
-		lastRenderedPositionSeconds = monotonicPosition;
-		const percent = (monotonicPosition / progressSnapshot.durationSeconds) * 100;
+		const now = Date.now();
+		const elapsedSeconds = Math.max(0, (now - lastTickTime) / 1000);
+		lastTickTime = now;
+
+		// Advance estimated target at real-time speed between polling responses.
+		targetPositionSeconds += elapsedSeconds;
+
+		// Keep the estimate inside the current minute bucket until the API confirms the next one.
+		const maxAllowedTarget = Math.max(0, ((lastKnownMinutesAgo + 1) * 60) - 1);
+		targetPositionSeconds = Math.min(targetPositionSeconds, maxAllowedTarget, trackDurationSeconds);
+
+		const distance = targetPositionSeconds - visualPositionSeconds;
+		visualPositionSeconds += distance * 0.1;
+		visualPositionSeconds = Math.min(Math.max(0, visualPositionSeconds), trackDurationSeconds);
+
+		const percent = (visualPositionSeconds / trackDurationSeconds) * 100;
 
 		setProgress(percent, true);
-		if (percent >= 100) {
+		if (visualPositionSeconds >= trackDurationSeconds - 0.5) {
 			stopProgressTicker();
 		}
+	};
+
+	const startProgressTicker = () => {
+		if (progressTickerId !== null) {
+			return;
+		}
+
+		lastTickTime = Date.now();
+		progressTickerId = window.setInterval(() => {
+			renderEstimatedProgress();
+		}, 33);
 	};
 
 	const setProgressSnapshot = (progress, durationSeconds, shouldShow, trackKey) => {
@@ -202,33 +233,32 @@ const widgetId = `now-playing-${Math.random().toString(36).slice(2, 10)}`;
 			typeof durationSeconds !== "number" ||
 			durationSeconds <= 0
 		) {
-			progressSnapshot = null;
-			currentTrackKey = null;
-			lastRenderedPositionSeconds = 0;
+			resetProgressState();
 			stopProgressTicker();
 			setProgress(0, false);
 			return;
 		}
 
+		trackDurationSeconds = durationSeconds;
+		const rawSeconds = Math.max(0, progress.positionSeconds);
+		const incomingMinutesAgo = Math.max(0, Math.floor(rawSeconds / 60));
+
 		if (trackKey !== currentTrackKey) {
 			currentTrackKey = trackKey;
-			lastRenderedPositionSeconds = 0;
+			lastKnownMinutesAgo = incomingMinutesAgo;
+
+			const midpointGuess = incomingMinutesAgo === 0 ? 0 : rawSeconds + 30;
+			targetPositionSeconds = Math.min(midpointGuess, trackDurationSeconds);
+			visualPositionSeconds = Math.min(rawSeconds, trackDurationSeconds);
+			lastTickTime = Date.now();
+		} else if (incomingMinutesAgo > lastKnownMinutesAgo || incomingMinutesAgo < lastKnownMinutesAgo) {
+			// Boundary detection: once the minute bucket changes, we know the exact snapped position.
+			targetPositionSeconds = Math.min(incomingMinutesAgo * 60, trackDurationSeconds);
+			lastKnownMinutesAgo = incomingMinutesAgo;
 		}
-
-		const baselinePosition = Math.max(lastRenderedPositionSeconds, Math.max(0, progress.positionSeconds));
-
-		progressSnapshot = {
-			positionSeconds: baselinePosition,
-			durationSeconds,
-			receivedAtMs: Date.now(),
-		};
 
 		renderEstimatedProgress();
-		if (progressTickerId === null) {
-			progressTickerId = window.setInterval(() => {
-				renderEstimatedProgress();
-			}, 500);
-		}
+		startProgressTicker();
 	};
 
 	const formatRelativeTime = (isoTimestamp) => {
