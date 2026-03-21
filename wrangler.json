@@ -3,6 +3,17 @@
 	"compatibility_date": "2026-03-19",
 	"compatibility_flags": ["nodejs_compat"],
 	"main": "./dist/_worker.js/index.js",
+	"vars": {
+		"NAVIDROME_CLIENT_NAME": "learningis1.st",
+		"NAVIDROME_API_VERSION": "1.16.1"
+	},
+	"kv_namespaces": [
+		{
+			"binding": "LAST_LISTENED_KV",
+			"id": "26dcd80e570c43329f8e3a8e82f217ad",
+			"preview_id": "26dcd80e570c43329f8e3a8e82f217ad"
+		}
+	],
 	"assets": {
 		"directory": "./dist",
 		"binding": "ASSETS"

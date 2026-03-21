@@ -1,0 +1,200 @@
+---
+export interface Props {
+	endpoint?: string;
+	refreshMs?: number;
+}
+
+const { endpoint = "/api/now-playing.json", refreshMs = 30_000 } = Astro.props;
+const widgetId = `now-playing-${Math.random().toString(36).slice(2, 10)}`;
+---
+
+<section
+	id={widgetId}
+	class="now-playing"
+	aria-live="polite"
+	data-endpoint={endpoint}
+	data-refresh-ms={String(refreshMs)}
+>
+	<div class="now-playing__header">
+		<p class="now-playing__label" data-label>Listening</p>
+		<p class="now-playing__time" data-time hidden></p>
+	</div>
+	<div class="now-playing__content">
+		<div class="now-playing__cover-wrap" data-cover-wrap hidden>
+			<img class="now-playing__cover" data-cover src="data:," alt="Album artwork" loading="lazy" decoding="async" />
+		</div>
+		<div class="now-playing__text">
+			<p class="now-playing__status" data-status>Loading...</p>
+			<p class="now-playing__track" data-track hidden></p>
+			<p class="now-playing__meta" data-meta hidden></p>
+		</div>
+	</div>
+	<div class="now-playing__progress" data-progress hidden>
+		<div class="now-playing__progress-bar" data-progress-bar></div>
+	</div>
+</section>
+
+<script is:inline define:vars={{ widgetId }}>
+	const root = document.getElementById(widgetId);
+	if (!root) {
+		throw new Error("NowPlaying root element not found.");
+	}
+
+	const endpoint = root.dataset.endpoint ?? "/api/now-playing.json";
+	const refreshMs = Number(root.dataset.refreshMs ?? "30000");
+
+	const statusEl = root.querySelector("[data-status]");
+	const labelEl = root.querySelector("[data-label]");
+	const trackEl = root.querySelector("[data-track]");
+	const metaEl = root.querySelector("[data-meta]");
+	const timeEl = root.querySelector("[data-time]");
+	const coverWrapEl = root.querySelector("[data-cover-wrap]");
+	const coverEl = root.querySelector("[data-cover]");
+	const progressEl = root.querySelector("[data-progress]");
+	const progressBarEl = root.querySelector("[data-progress-bar]");
+
+	const setLabel = (label) => {
+		if (labelEl instanceof HTMLElement) {
+			labelEl.textContent = label;
+		}
+	};
+
+	const setIdleState = (message) => {
+		if (
+			!(statusEl instanceof HTMLElement) ||
+			!(trackEl instanceof HTMLElement) ||
+			!(metaEl instanceof HTMLElement) ||
+			!(timeEl instanceof HTMLElement) ||
+			!(coverWrapEl instanceof HTMLElement) ||
+			!(progressEl instanceof HTMLElement)
+		) {
+			return;
+		}
+
+		setLabel("Listening");
+		statusEl.textContent = message;
+		statusEl.hidden = false;
+		trackEl.hidden = true;
+		metaEl.hidden = true;
+		timeEl.hidden = true;
+		coverWrapEl.hidden = true;
+		progressEl.hidden = true;
+	};
+
+	const setCover = (url) => {
+		if (!(coverWrapEl instanceof HTMLElement) || !(coverEl instanceof HTMLImageElement)) {
+			return;
+		}
+
+		if (!url) {
+			coverWrapEl.hidden = true;
+			coverEl.removeAttribute("src");
+			return;
+		}
+
+		coverWrapEl.hidden = false;
+		coverEl.src = url;
+	};
+
+	const setProgress = (progress, shouldShow) => {
+		if (!(progressEl instanceof HTMLElement) || !(progressBarEl instanceof HTMLElement)) {
+			return;
+		}
+
+		if (!shouldShow || !progress || typeof progress.percent !== "number") {
+			progressEl.hidden = true;
+			progressBarEl.style.width = "0%";
+			return;
+		}
+
+		progressEl.hidden = false;
+		progressBarEl.style.width = `${Math.max(0, Math.min(100, progress.percent))}%`;
+	};
+
+	const formatRelativeTime = (isoTimestamp) => {
+		const timestamp = Date.parse(isoTimestamp);
+		if (Number.isNaN(timestamp)) {
+			return "";
+		}
+
+		const minutes = Math.max(1, Math.floor((Date.now() - timestamp) / 60_000));
+		if (minutes < 60) {
+			return `${minutes}m ago`;
+		}
+
+		const hours = Math.floor(minutes / 60);
+		if (hours < 24) {
+			return `${hours}h ago`;
+		}
+
+		const days = Math.floor(hours / 24);
+		return `${days}d ago`;
+	};
+
+	const renderData = (payload) => {
+		if (
+			!(statusEl instanceof HTMLElement) ||
+			!(trackEl instanceof HTMLElement) ||
+			!(metaEl instanceof HTMLElement) ||
+			!(timeEl instanceof HTMLElement)
+		) {
+			return;
+		}
+
+		if (!payload || !payload.track) {
+			setIdleState("Not listening right now");
+			return;
+		}
+
+		statusEl.hidden = true;
+		trackEl.hidden = false;
+		metaEl.hidden = false;
+
+		trackEl.textContent = payload.track.title;
+		metaEl.textContent = `${payload.track.artist} - ${payload.track.album}`;
+		setCover(payload.track.coverArtUrl);
+
+		if (payload.source === "playing") {
+			setLabel("Now listening");
+			timeEl.hidden = true;
+			setProgress(payload.progress, true);
+			return;
+		}
+
+		setLabel("Last listened");
+		setProgress(null, false);
+		const relativeTime = formatRelativeTime(payload.lastPlayedAt);
+		if (!relativeTime) {
+			timeEl.hidden = true;
+			return;
+		}
+
+		timeEl.hidden = false;
+		timeEl.textContent = relativeTime;
+	};
+
+	const fetchNowPlaying = async () => {
+		try {
+			const response = await fetch(endpoint, {
+				headers: { Accept: "application/json" },
+				cache: "no-store",
+			});
+
+			if (!response.ok) {
+				setIdleState("Unable to load current track");
+				return;
+			}
+
+			const payload = await response.json();
+			renderData(payload);
+		} catch (_error) {
+			setIdleState("Unable to load current track");
+		}
+	};
+
+	void fetchNowPlaying();
+	window.setInterval(() => {
+		void fetchNowPlaying();
+	}, refreshMs);
+</script>
+

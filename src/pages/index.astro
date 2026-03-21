@@ -1,6 +1,7 @@
 ---
 import BaseLayout from "../layouts/BaseLayout.astro";
 import SocialLink from "../components/SocialLink.astro";
+import NowPlaying from "../components/NowPlaying.astro";
 
 const title = "learningis1.st";
 const description = "learningis1st - Connect with me on social media and email";
@@ -56,6 +57,8 @@ const links: LinkItem[] = [
 		<div class="container">
 			<h1>learningis1st</h1>
 			<p class="tagline">Let's connect</p>
+
+			<NowPlaying />
 
 			<div class="links" aria-label="Social links">
 				{links.map((link) => (
