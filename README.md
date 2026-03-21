@@ -1,18 +1,35 @@
 # learningis1.st
 
-Minimal Astro + Cloudflare project scaffold with starter template content removed.
+Personal site built with Astro and deployed on Cloudflare Workers.
 
-## Commands
+## Quick start
 
 ```bash
 npm install
 npm run dev
+```
+
+## Build and preview
+
+```bash
 npm run build
 npm run preview
 ```
 
-## Notes
+## Deploy
 
-- Main page: `src/pages/index.astro`
+```bash
+npm run check
+npm run deploy
+```
+
+## Project map
+
+- Home page: `src/pages/index.astro`
+- Base layout: `src/layouts/BaseLayout.astro`
 - Global styles: `src/styles/global.css`
-- Deploy script: `npm run deploy`
+- Worker/deploy config: `wrangler.json`
+
+## Runtime
+
+- Node.js `>=22`
