@@ -280,11 +280,11 @@ h1 {
 .link:nth-child(4) { animation-delay: 0.6s; }
 
 .link:hover {
-	background: var(--accent);
-	color: white;
-	border-color: var(--accent);
-	transform: translateY(-2px);
-	box-shadow: 0 8px 16px rgba(0, 0, 0, 0.1);
+	background: color-mix(in srgb, var(--text) 10%, var(--bg-accent));
+	color: var(--text);
+	border-color: color-mix(in srgb, var(--text) 22%, var(--border));
+	transform: translateY(-1px);
+	box-shadow: 0 6px 12px rgba(0, 0, 0, 0.08);
 }
 
 .link .icon {
@@ -318,11 +318,11 @@ h1 {
 }
 
 .payment-link:hover {
-	background: var(--accent);
-	color: #ffffff;
-	border-color: var(--accent);
-	transform: translateY(-2px);
-	box-shadow: 0 8px 16px rgba(0, 0, 0, 0.1);
+	background: color-mix(in srgb, var(--text) 10%, var(--bg-accent));
+	color: var(--text);
+	border-color: color-mix(in srgb, var(--text) 22%, var(--border));
+	transform: translateY(-1px);
+	box-shadow: 0 6px 12px rgba(0, 0, 0, 0.08);
 }
 
 .payment-icon {
