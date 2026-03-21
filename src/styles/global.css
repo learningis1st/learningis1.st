@@ -325,9 +325,10 @@ h1 {
 	box-shadow: 0 8px 16px rgba(0, 0, 0, 0.1);
 }
 
-.payment-badge {
-	font-size: 1.1rem;
-	font-weight: 700;
+.payment-icon {
+	width: 1.3rem;
+	height: 1.3rem;
+	flex-shrink: 0;
 }
 
 .payment-link:focus-visible {
