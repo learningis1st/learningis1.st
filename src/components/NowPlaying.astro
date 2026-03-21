@@ -12,6 +12,7 @@ const widgetId = `now-playing-${Math.random().toString(36).slice(2, 10)}`;
 	id={widgetId}
 	class="now-playing"
 	aria-live="polite"
+	data-state="loading"
 	data-endpoint={endpoint}
 	data-refresh-ms={String(refreshMs)}
 >
@@ -52,6 +53,16 @@ const widgetId = `now-playing-${Math.random().toString(36).slice(2, 10)}`;
 	const coverEl = root.querySelector("[data-cover]");
 	const progressEl = root.querySelector("[data-progress]");
 	const progressBarEl = root.querySelector("[data-progress-bar]");
+	let hasLoadedOnce = false;
+
+	const markReady = () => {
+		if (hasLoadedOnce) {
+			return;
+		}
+
+		hasLoadedOnce = true;
+		root.dataset.state = "ready";
+	};
 
 	const setLabel = (label) => {
 		if (labelEl instanceof HTMLElement) {
@@ -79,6 +90,7 @@ const widgetId = `now-playing-${Math.random().toString(36).slice(2, 10)}`;
 		timeEl.hidden = true;
 		coverWrapEl.hidden = true;
 		progressEl.hidden = true;
+		markReady();
 	};
 
 	const setCover = (url) => {
@@ -150,6 +162,7 @@ const widgetId = `now-playing-${Math.random().toString(36).slice(2, 10)}`;
 		trackEl.hidden = false;
 		metaEl.hidden = false;
 		setCover(payload.track.coverArtUrl);
+		markReady();
 
 		if (payload.source === "playing") {
 			trackEl.textContent = payload.track.title;
