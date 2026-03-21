@@ -66,7 +66,14 @@ const widgetId = `now-playing-${Math.random().toString(36).slice(2, 10)}`;
 
 	const setLabel = (label) => {
 		if (labelEl instanceof HTMLElement) {
-			labelEl.textContent = label;
+			if (labelEl.textContent === label) {
+				return;
+			}
+			labelEl.classList.add("transitioning");
+			setTimeout(() => {
+				labelEl.textContent = label;
+				labelEl.classList.remove("transitioning");
+			}, 150);
 		}
 	};
 
