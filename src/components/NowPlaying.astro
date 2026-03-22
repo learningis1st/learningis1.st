@@ -17,7 +17,7 @@ const widgetId = `now-playing-${Math.random().toString(36).slice(2, 10)}`;
 	data-refresh-ms={String(refreshMs)}
 >
 	<div class="now-playing__header">
-		<p class="now-playing__label" data-label>Now Listening</p>
+		<p class="now-playing__label" data-label>Last listened album</p>
 		<p class="now-playing__time" data-time hidden></p>
 	</div>
 	<div class="now-playing__content">
@@ -128,23 +128,21 @@ const widgetId = `now-playing-${Math.random().toString(36).slice(2, 10)}`;
 		}, 400);
 	};
 
-	const setTextContent = (el, text) => {
+	const setTextContent = (el, text, transitionMs = 150) => {
 		if (!el || el.textContent === text) return;
 		el.classList.add("transitioning");
 		setTimeout(() => {
 			el.textContent = text;
 			el.classList.remove("transitioning");
-		}, 150);
+		}, transitionMs);
 	};
 
 	const setLabelText = (text) => {
-		if (els.label && els.label.textContent !== text) {
-			els.label.textContent = text;
-		}
+		setTextContent(els.label, text, 200);
 	};
 
 	const setIdleState = (message) => {
-		setLabelText("Now Listening");
+		setLabelText("Last listened album");
 
 		if (els.status) {
 			els.status.textContent = message;
