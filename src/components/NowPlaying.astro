@@ -15,24 +15,26 @@ try {
 	if (res.ok) {
 		initialPayload = await res.json();
 	}
-} catch (_error) {
+} catch {
 	// Fall back to client fetch if the server-side seed fails.
 }
 
-const hasTrack = Boolean(initialPayload?.track);
 const hasSeedPayload = initialPayload !== null;
-const isPlaying = initialPayload?.source === "playing";
 const track = initialPayload?.track;
+const hasTrack = Boolean(track);
+const isPlaying = initialPayload?.source === "playing";
+
 const title = track?.title || "Unknown track";
-const metaStr = isPlaying
-	? `${track?.artist || "Unknown artist"} - ${track?.album || "Unknown album"}`
-	: track?.artist || "Unknown artist";
-const trackDisplay = isPlaying ? title : track?.album || "Unknown album";
+const artist = track?.artist || "Unknown artist";
+const album = track?.album || "Unknown album";
+
+const metaStr = isPlaying ? `${artist} - ${album}` : artist;
+const trackDisplay = isPlaying ? title : album;
 const labelText = isPlaying ? "Now listening" : "Last listened album";
 const coverUrl = track?.coverArtUrl || "data:,";
 const progressScale = isPlaying ? (initialPayload?.progress?.percent ?? 0) / 100 : 0;
 const showInitialStatus = hasSeedPayload && !hasTrack;
-const initialStatusText = hasSeedPayload && !hasTrack ? "Not listening right now" : "Loading...";
+const initialStatusText = showInitialStatus ? "Not listening right now" : "Loading...";
 ---
 
 <section
@@ -99,7 +101,6 @@ const initialStatusText = hasSeedPayload && !hasTrack ? "Not listening right now
 	};
 
 	const clampPercent = (value) => Math.max(0, Math.min(100, value));
-
 	const getTrackKey = (t) => JSON.stringify([t?.title, t?.artist, t?.album, t?.coverArtId, t?.durationSeconds]);
 
 	const stopTicker = () => {
@@ -164,9 +165,7 @@ const initialStatusText = hasSeedPayload && !hasTrack ? "Not listening right now
 		}, transitionMs);
 	};
 
-	const setLabelText = (text) => {
-		setTextContent(els.label, text, 200);
-	};
+	const setLabelText = (text) => setTextContent(els.label, text, 200);
 
 	const setIdleState = (message) => {
 		setLabelText("Last listened album");
@@ -348,6 +347,22 @@ const initialStatusText = hasSeedPayload && !hasTrack ? "Not listening right now
 		}
 	};
 
+	const calculateNextDelay = (payload) => {
+		if (payload?.source !== "playing") return idleRefreshMs;
+
+		let nextDelay;
+		const secsToNextBound = ((state.lastMinsAgo + 1) * 60) - state.targetSec;
+		const secsToEnd = Math.max(0, state.durationSec - state.targetSec);
+
+		if (state.isSynced) {
+			nextDelay = (Math.min(secsToNextBound, secsToEnd) + 1.5) * 1000;
+		} else {
+			const secsToStall = Math.max(0, ((state.lastMinsAgo + 1) * 60) - state.targetSec);
+			nextDelay = secsToStall > 0 ? (secsToStall / 2) * 1000 : 5000;
+		}
+		return Math.max(2_000, Math.min(refreshMs, nextDelay));
+	};
+
 	const fetchNowPlaying = async () => {
 		if (!document.contains(root)) return;
 
@@ -361,29 +376,13 @@ const initialStatusText = hasSeedPayload && !hasTrack ? "Not listening right now
 			});
 
 			if (reqId !== state.reqId) return;
-
 			if (!res.ok) throw new Error("Fetch failed");
 
 			const payload = await res.json();
 			if (reqId !== state.reqId) return;
 
 			renderData(payload);
-
-			let nextDelay = idleRefreshMs;
-			if (payload?.isPlaying) {
-				const secsToNextBound = ((state.lastMinsAgo + 1) * 60) - state.targetSec;
-				const secsToEnd = Math.max(0, state.durationSec - state.targetSec);
-
-				if (state.isSynced) {
-					nextDelay = (Math.min(secsToNextBound, secsToEnd) + 1.5) * 1000;
-				} else {
-					const secsToStall = Math.max(0, ((state.lastMinsAgo + 1) * 60) - state.targetSec);
-					nextDelay = secsToStall > 0 ? (secsToStall / 2) * 1000 : 5000;
-				}
-				nextDelay = Math.max(2_000, Math.min(refreshMs, nextDelay));
-			}
-
-			scheduleNextFetch(nextDelay);
+			scheduleNextFetch(calculateNextDelay(payload));
 		} catch {
 			if (reqId !== state.reqId) return;
 			clearLoading();
@@ -394,22 +393,7 @@ const initialStatusText = hasSeedPayload && !hasTrack ? "Not listening right now
 
 	if (initialPayload) {
 		renderData(initialPayload);
-
-		let nextDelay = idleRefreshMs;
-		if (initialPayload?.isPlaying) {
-			const secsToNextBound = ((state.lastMinsAgo + 1) * 60) - state.targetSec;
-			const secsToEnd = Math.max(0, state.durationSec - state.targetSec);
-
-			if (state.isSynced) {
-				nextDelay = (Math.min(secsToNextBound, secsToEnd) + 1.5) * 1000;
-			} else {
-				const secsToStall = Math.max(0, ((state.lastMinsAgo + 1) * 60) - state.targetSec);
-				nextDelay = secsToStall > 0 ? (secsToStall / 2) * 1000 : 5000;
-			}
-			nextDelay = Math.max(2_000, Math.min(refreshMs, nextDelay));
-		}
-
-		scheduleNextFetch(nextDelay);
+		scheduleNextFetch(calculateNextDelay(initialPayload));
 	} else {
 		void fetchNowPlaying();
 	}
