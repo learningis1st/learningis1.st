@@ -10,6 +10,8 @@
 	--border: #e0e0e0;
 	--accent: #4a4a4a;
 	--accent-hover: #2f2f2f;
+	--btn-hover-bg: color-mix(in srgb, var(--text) 10%, var(--bg-accent));
+	--btn-hover-border: color-mix(in srgb, var(--text) 22%, var(--border));
 }
 
 @media (prefers-color-scheme: dark) {
@@ -89,7 +91,6 @@ main {
    5. Components
    ========================================= */
 
-/* --- Now Playing Widget --- */
 .now-playing {
 	--now-playing-progress-track: color-mix(in srgb, var(--border) 78%, transparent);
 	--now-playing-progress-fill: color-mix(in srgb, var(--text) 34%, var(--border));
@@ -151,7 +152,6 @@ main {
 	display: block;
 }
 
-/* Grouped transitions */
 .now-playing__track,
 .now-playing__meta,
 .now-playing__cover-wrap {
@@ -168,7 +168,6 @@ main {
 	transition: opacity 0.3s ease-in-out;
 }
 
-/* Grouped Typography for Widget Text */
 .now-playing__status,
 .now-playing__track,
 .now-playing__meta,
@@ -188,7 +187,6 @@ main {
 	margin-top: 0.2rem;
 }
 
-/* Grouped Text Overflow */
 .now-playing__track,
 .now-playing__meta {
 	white-space: nowrap;
@@ -219,58 +217,7 @@ main {
 	will-change: transform;
 }
 
-/* --- Links Container --- */
-.links {
-	display: flex;
-	flex-direction: row;
-	justify-content: center;
-	align-items: center;
-	flex-wrap: wrap;
-	gap: 1rem;
-	margin-top: 2rem;
-}
-
-.link {
-	display: flex;
-	align-items: center;
-	justify-content: center;
-	width: 3.25rem;
-	height: 3.25rem;
-	background: var(--bg-accent);
-	border: 1px solid var(--border);
-	border-radius: 999px;
-	color: var(--text);
-	text-decoration: none;
-	transition: all 0.2s ease;
-	cursor: pointer;
-	animation: fadeInScale 0.5s ease-out forwards;
-	opacity: 0;
-}
-
-.link:hover {
-	background: color-mix(in srgb, var(--text) 10%, var(--bg-accent));
-	color: var(--text);
-	border-color: color-mix(in srgb, var(--text) 22%, var(--border));
-	transform: translateY(-1px);
-	box-shadow: 0 6px 12px rgba(0, 0, 0, 0.08);
-}
-
-.link .icon {
-	width: 1.5rem;
-	height: 1.5rem;
-	display: flex;
-	align-items: center;
-	justify-content: center;
-}
-
-/* --- Payment Widget --- */
-.payment-widget {
-	position: fixed;
-	top: 1.1rem;
-	right: 1.1rem;
-	z-index: 20;
-}
-
+.link,
 .payment-link {
 	display: flex;
 	align-items: center;
@@ -285,12 +232,44 @@ main {
 	transition: all 0.2s ease;
 }
 
+.link:hover,
 .payment-link:hover {
-	background: color-mix(in srgb, var(--text) 10%, var(--bg-accent));
+	background: var(--btn-hover-bg);
 	color: var(--text);
-	border-color: color-mix(in srgb, var(--text) 22%, var(--border));
+	border-color: var(--btn-hover-border);
 	transform: translateY(-1px);
 	box-shadow: 0 6px 12px rgba(0, 0, 0, 0.08);
+}
+
+.links {
+	display: flex;
+	flex-direction: row;
+	justify-content: center;
+	align-items: center;
+	flex-wrap: wrap;
+	gap: 1rem;
+	margin-top: 2rem;
+}
+
+.link {
+	cursor: pointer;
+	animation: fadeInScale 0.5s ease-out forwards;
+	opacity: 0;
+}
+
+.link .icon {
+	width: 1.5rem;
+	height: 1.5rem;
+	display: flex;
+	align-items: center;
+	justify-content: center;
+}
+
+.payment-widget {
+	position: fixed;
+	top: 1.1rem;
+	right: 1.1rem;
+	z-index: 20;
 }
 
 .payment-link:focus-visible {
@@ -304,11 +283,9 @@ main {
 	flex-shrink: 0;
 }
 
-/* --- Utilities --- */
 .transitioning {
 	opacity: 0;
 }
-
 
 /* =========================================
    6. Animations
@@ -363,7 +340,8 @@ main {
 		max-width: 100%;
 	}
 
-	.link {
+	.link,
+	.payment-link {
 		width: 3rem;
 		height: 3rem;
 	}
@@ -375,10 +353,5 @@ main {
 	.payment-widget {
 		top: 0.75rem;
 		right: 0.75rem;
-	}
-
-	.payment-link {
-		width: 3rem;
-		height: 3rem;
 	}
 }
