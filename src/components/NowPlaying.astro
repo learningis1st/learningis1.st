@@ -1,4 +1,6 @@
 ---
+import { GET } from "../pages/api/now-playing.json";
+
 export interface Props {
 	endpoint?: string;
 	refreshMs?: number;
@@ -6,36 +8,61 @@ export interface Props {
 
 const { endpoint = "/api/now-playing.json", refreshMs = 10_000 } = Astro.props;
 const widgetId = `now-playing-${Math.random().toString(36).slice(2, 10)}`;
+
+let initialPayload: any = null;
+try {
+	const res = (await GET(Astro as any)) as Response;
+	if (res.ok) {
+		initialPayload = await res.json();
+	}
+} catch (_error) {
+	// Fall back to client fetch if the server-side seed fails.
+}
+
+const hasTrack = Boolean(initialPayload?.track);
+const hasSeedPayload = initialPayload !== null;
+const isPlaying = initialPayload?.source === "playing";
+const track = initialPayload?.track;
+const title = track?.title || "Unknown track";
+const metaStr = isPlaying
+	? `${track?.artist || "Unknown artist"} - ${track?.album || "Unknown album"}`
+	: track?.artist || "Unknown artist";
+const trackDisplay = isPlaying ? title : track?.album || "Unknown album";
+const labelText = isPlaying ? "Now listening" : "Last listened album";
+const coverUrl = track?.coverArtUrl || "data:,";
+const progressScale = isPlaying ? (initialPayload?.progress?.percent ?? 0) / 100 : 0;
+const showInitialStatus = hasSeedPayload && !hasTrack;
+const initialStatusText = hasSeedPayload && !hasTrack ? "Not listening right now" : "Loading...";
 ---
 
 <section
 	id={widgetId}
 	class="now-playing"
 	aria-live="polite"
-	data-state="loading"
+	data-state={hasSeedPayload ? "ready" : "loading"}
 	data-endpoint={endpoint}
 	data-refresh-ms={String(refreshMs)}
 >
 	<div class="now-playing__header">
-		<p class="now-playing__label" data-label>Last listened album</p>
-		<p class="now-playing__time" data-time hidden></p>
+		<p class="now-playing__label" data-label>{labelText}</p>
+		<p class="now-playing__time" data-time hidden={!hasTrack || isPlaying}></p>
 	</div>
 	<div class="now-playing__content">
-		<div class="now-playing__cover-wrap" data-cover-wrap hidden>
-			<img class="now-playing__cover" data-cover src="data:," alt="Album artwork" loading="lazy" decoding="async" />
+		<div class="now-playing__cover-wrap" data-cover-wrap hidden={!hasTrack}>
+			<img class="now-playing__cover" data-cover src={coverUrl} alt="Album artwork" loading="lazy" decoding="async" />
 		</div>
 		<div class="now-playing__text">
-			<p class="now-playing__status" data-status hidden>Loading...</p>
-			<p class="now-playing__track" data-track hidden></p>
-			<p class="now-playing__meta" data-meta hidden></p>
+			<p class="now-playing__status" data-status hidden={!showInitialStatus}>{initialStatusText}</p>
+			<p class="now-playing__track" data-track hidden={!hasTrack}>{trackDisplay}</p>
+			<p class="now-playing__meta" data-meta hidden={!hasTrack}>{metaStr}</p>
 		</div>
 	</div>
-	<div class="now-playing__progress" data-progress hidden>
-		<div class="now-playing__progress-bar" data-progress-bar></div>
+	<div class="now-playing__progress" data-progress hidden={!isPlaying}>
+		<div class="now-playing__progress-bar" data-progress-bar style={`transform: scaleX(${progressScale})`}></div>
 	</div>
 </section>
 
-<script is:inline define:vars={{ widgetId }}>
+<script is:inline define:vars={{ widgetId, initialPayload }}>
 	const root = document.getElementById(widgetId);
 	if (!root) throw new Error("NowPlaying root element not found.");
 
@@ -325,7 +352,7 @@ const widgetId = `now-playing-${Math.random().toString(36).slice(2, 10)}`;
 		if (!document.contains(root)) return;
 
 		const reqId = ++state.reqId;
-		showLoadingWithDelay();
+		if (!state.hasLoaded) showLoadingWithDelay();
 
 		try {
 			const res = await fetch(endpoint, {
@@ -365,5 +392,25 @@ const widgetId = `now-playing-${Math.random().toString(36).slice(2, 10)}`;
 		}
 	};
 
-	void fetchNowPlaying();
+	if (initialPayload) {
+		renderData(initialPayload);
+
+		let nextDelay = idleRefreshMs;
+		if (initialPayload?.isPlaying) {
+			const secsToNextBound = ((state.lastMinsAgo + 1) * 60) - state.targetSec;
+			const secsToEnd = Math.max(0, state.durationSec - state.targetSec);
+
+			if (state.isSynced) {
+				nextDelay = (Math.min(secsToNextBound, secsToEnd) + 1.5) * 1000;
+			} else {
+				const secsToStall = Math.max(0, ((state.lastMinsAgo + 1) * 60) - state.targetSec);
+				nextDelay = secsToStall > 0 ? (secsToStall / 2) * 1000 : 5000;
+			}
+			nextDelay = Math.max(2_000, Math.min(refreshMs, nextDelay));
+		}
+
+		scheduleNextFetch(nextDelay);
+	} else {
+		void fetchNowPlaying();
+	}
 </script>
