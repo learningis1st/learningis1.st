@@ -37,108 +37,99 @@ const widgetId = `now-playing-${Math.random().toString(36).slice(2, 10)}`;
 
 <script is:inline define:vars={{ widgetId }}>
 	const root = document.getElementById(widgetId);
-	if (!root) {
-		throw new Error("NowPlaying root element not found.");
-	}
+	if (!root) throw new Error("NowPlaying root element not found.");
 
 	const endpoint = root.dataset.endpoint ?? "/api/now-playing.json";
 	const refreshMs = Number(root.dataset.refreshMs ?? "10000");
 	const idleRefreshMs = 30_000;
 
-	const statusEl = root.querySelector("[data-status]");
-	const labelEl = root.querySelector("[data-label]");
-	const trackEl = root.querySelector("[data-track]");
-	const metaEl = root.querySelector("[data-meta]");
-	const timeEl = root.querySelector("[data-time]");
-	const coverWrapEl = root.querySelector("[data-cover-wrap]");
-	const coverEl = root.querySelector("[data-cover]");
-	const progressEl = root.querySelector("[data-progress]");
-	const progressBarEl = root.querySelector("[data-progress-bar]");
+	const $ = (selector) => root.querySelector(selector);
+	const els = {
+		status: $("[data-status]"),
+		label: $("[data-label]"),
+		track: $("[data-track]"),
+		meta: $("[data-meta]"),
+		time: $("[data-time]"),
+		coverWrap: $("[data-cover-wrap]"),
+		cover: $("[data-cover]"),
+		progress: $("[data-progress]"),
+		progressBar: $("[data-progress-bar]")
+	};
 
-	let hasLoadedOnce = false;
-	let progressTickerId = null;
-	let fetchTimerId = null;
-	let loadingTimeoutId = null;
-	let currentTrackKey = null;
-	let targetPositionSeconds = 0;
-	let visualPositionSeconds = 0;
-	let lastKnownMinutesAgo = 0;
-	let lastTickTime = Date.now();
-	let trackDurationSeconds = 0;
-	let latestRequestId = 0;
-	let isSynced = false;
+	const state = {
+		hasLoaded: false,
+		tickerId: null,
+		fetchId: null,
+		loadingId: null,
+		trackKey: null,
+		targetSec: 0,
+		visualSec: 0,
+		lastMinsAgo: 0,
+		lastTick: Date.now(),
+		durationSec: 0,
+		reqId: 0,
+		isSynced: false
+	};
 
 	const clampPercent = (value) => Math.max(0, Math.min(100, value));
 
-	const getTrackKey = (track) =>
-		JSON.stringify({
-			title: track?.title ?? "",
-			artist: track?.artist ?? "",
-			album: track?.album ?? "",
-			coverArtId: track?.coverArtId ?? null,
-			durationSeconds: track?.durationSeconds ?? null,
+	const getTrackKey = (t) => JSON.stringify([t?.title, t?.artist, t?.album, t?.coverArtId, t?.durationSeconds]);
+
+	const stopTicker = () => {
+		if (state.tickerId === null) return;
+		window.cancelAnimationFrame(state.tickerId);
+		state.tickerId = null;
+	};
+
+	const clearFetch = () => {
+		if (state.fetchId === null) return;
+		window.clearTimeout(state.fetchId);
+		state.fetchId = null;
+	};
+
+	const clearLoading = () => {
+		if (state.loadingId === null) return;
+		window.clearTimeout(state.loadingId);
+		state.loadingId = null;
+	};
+
+	const resetProgress = () => {
+		Object.assign(state, {
+			targetSec: 0,
+			visualSec: 0,
+			lastMinsAgo: 0,
+			lastTick: Date.now(),
+			durationSec: 0,
+			trackKey: null,
+			isSynced: false
 		});
-
-	const stopProgressTicker = () => {
-		if (progressTickerId !== null) {
-			window.cancelAnimationFrame(progressTickerId);
-			progressTickerId = null;
-		}
-	};
-
-	const resetProgressState = () => {
-		targetPositionSeconds = 0;
-		visualPositionSeconds = 0;
-		lastKnownMinutesAgo = 0;
-		lastTickTime = Date.now();
-		trackDurationSeconds = 0;
-		currentTrackKey = null;
-		isSynced = false;
-	};
-
-	const clearFetchTimer = () => {
-		if (fetchTimerId !== null) {
-			window.clearTimeout(fetchTimerId);
-			fetchTimerId = null;
-		}
-	};
-
-	const clearLoadingTimeout = () => {
-		if (loadingTimeoutId !== null) {
-			window.clearTimeout(loadingTimeoutId);
-			loadingTimeoutId = null;
-		}
 	};
 
 	const scheduleNextFetch = (delayMs) => {
-		clearFetchTimer();
+		clearFetch();
 		if (!document.contains(root)) return;
-
-		fetchTimerId = window.setTimeout(() => {
-			void fetchNowPlaying();
-		}, Math.max(1_000, delayMs));
+		state.fetchId = window.setTimeout(() => void fetchNowPlaying(), Math.max(1_000, delayMs));
 	};
 
 	const markReady = () => {
-		if (hasLoadedOnce) return;
-		hasLoadedOnce = true;
+		if (state.hasLoaded) return;
+		state.hasLoaded = true;
 		root.dataset.state = "ready";
 	};
 
 	const showLoadingWithDelay = () => {
-		clearLoadingTimeout();
-		if (!(statusEl instanceof HTMLElement)) return;
-		
-		loadingTimeoutId = window.setTimeout(() => {
-			statusEl.textContent = "Loading...";
-			statusEl.hidden = false;
-			loadingTimeoutId = null;
-		}, 400); // 400ms delay before showing loading
+		clearLoading();
+		if (!els.status) return;
+
+		state.loadingId = window.setTimeout(() => {
+			els.status.textContent = "Loading...";
+			els.status.hidden = false;
+			state.loadingId = null;
+		}, 400);
 	};
 
 	const setTextContent = (el, text) => {
-		if (!(el instanceof HTMLElement) || el.textContent === text) return;
-
+		if (!el || el.textContent === text) return;
 		el.classList.add("transitioning");
 		setTimeout(() => {
 			el.textContent = text;
@@ -147,269 +138,230 @@ const widgetId = `now-playing-${Math.random().toString(36).slice(2, 10)}`;
 	};
 
 	const setLabelText = (text) => {
-		if (!(labelEl instanceof HTMLElement) || labelEl.textContent === text) return;
-		labelEl.textContent = text;
+		if (els.label && els.label.textContent !== text) {
+			els.label.textContent = text;
+		}
 	};
 
 	const setIdleState = (message) => {
-		if (!(statusEl instanceof HTMLElement) || !(trackEl instanceof HTMLElement) ||
-			!(metaEl instanceof HTMLElement) || !(timeEl instanceof HTMLElement) ||
-			!(coverWrapEl instanceof HTMLElement) || !(progressEl instanceof HTMLElement)) {
-			return;
-		}
-
 		setLabelText("Now Listening");
-		statusEl.textContent = message;
-		statusEl.hidden = false;
-		trackEl.hidden = true;
-		metaEl.hidden = true;
-		timeEl.hidden = true;
-		coverWrapEl.hidden = true;
 
-		resetProgressState();
-		stopProgressTicker();
-		progressEl.hidden = true;
-
-		if (progressBarEl instanceof HTMLElement) {
-			progressBarEl.style.transform = "scaleX(0)";
+		if (els.status) {
+			els.status.textContent = message;
+			els.status.hidden = false;
 		}
+		if (els.track) els.track.hidden = true;
+		if (els.meta) els.meta.hidden = true;
+		if (els.time) els.time.hidden = true;
+		if (els.coverWrap) els.coverWrap.hidden = true;
+
+		resetProgress();
+		stopTicker();
+
+		if (els.progress) els.progress.hidden = true;
+		if (els.progressBar) els.progressBar.style.transform = "scaleX(0)";
+
 		markReady();
 	};
 
 	const setCover = (url) => {
-		if (!(coverWrapEl instanceof HTMLElement) || !(coverEl instanceof HTMLImageElement)) return;
+		const { coverWrap, cover } = els;
+		if (!coverWrap || !cover) return;
 
 		if (!url) {
-			coverWrapEl.classList.add("transitioning");
+			coverWrap.classList.add("transitioning");
 			setTimeout(() => {
-				coverWrapEl.hidden = true;
-				coverEl.removeAttribute("src");
-				coverWrapEl.classList.remove("transitioning");
+				coverWrap.hidden = true;
+				cover.removeAttribute("src");
+				coverWrap.classList.remove("transitioning");
 			}, 150);
 			return;
 		}
 
-		if (coverEl.getAttribute("src") === url) return;
+		if (cover.getAttribute("src") === url) return;
 
-		coverWrapEl.classList.add("transitioning");
+		coverWrap.classList.add("transitioning");
 		setTimeout(() => {
-			coverWrapEl.hidden = false;
-			coverEl.onload = () => {
-				coverWrapEl.classList.remove("transitioning");
-				coverEl.onload = null;
+			coverWrap.hidden = false;
+			cover.onload = cover.onerror = () => {
+				coverWrap.classList.remove("transitioning");
+				cover.onload = cover.onerror = null;
 			};
-			coverEl.onerror = () => {
-				coverWrapEl.classList.remove("transitioning");
-				coverEl.onerror = null;
-			};
-			coverEl.src = url;
+			cover.src = url;
 		}, 150);
 	};
 
 	const setProgress = (percent, shouldShow) => {
-		if (!(progressEl instanceof HTMLElement) || !(progressBarEl instanceof HTMLElement)) return;
+		if (!els.progress || !els.progressBar) return;
 
 		if (!shouldShow || typeof percent !== "number") {
-			progressEl.hidden = true;
-			progressBarEl.style.transform = "scaleX(0)";
+			els.progress.hidden = true;
+			els.progressBar.style.transform = "scaleX(0)";
 			return;
 		}
 
-		progressEl.hidden = false;
-		progressBarEl.style.transform = `scaleX(${clampPercent(percent) / 100})`;
+		els.progress.hidden = false;
+		els.progressBar.style.transform = `scaleX(${clampPercent(percent) / 100})`;
 	};
 
 	const renderEstimatedProgress = () => {
-		if (trackDurationSeconds <= 0) return;
+		if (state.durationSec <= 0) return;
 
 		const now = Date.now();
-		const elapsedSeconds = Math.max(0, (now - lastTickTime) / 1000);
-		lastTickTime = now;
+		const elapsedSec = Math.max(0, (now - state.lastTick) / 1000);
+		state.lastTick = now;
 
-		// Advance estimated target at real-time speed between polling responses.
-		targetPositionSeconds += elapsedSeconds;
+		state.targetSec += elapsedSec;
+		const maxAllowed = Math.max(0, ((state.lastMinsAgo + 1) * 60) - 1);
+		state.targetSec = Math.min(state.targetSec, maxAllowed, state.durationSec);
 
-		// Keep the estimate inside the current minute bucket until the API confirms the next one.
-		const maxAllowedTarget = Math.max(0, ((lastKnownMinutesAgo + 1) * 60) - 1);
-		targetPositionSeconds = Math.min(targetPositionSeconds, maxAllowedTarget, trackDurationSeconds);
+		const distance = state.targetSec - state.visualSec;
+		state.visualSec += distance * 0.1;
+		state.visualSec = Math.min(Math.max(0, state.visualSec), state.durationSec);
 
-		const distance = targetPositionSeconds - visualPositionSeconds;
-		visualPositionSeconds += distance * 0.1;
-		visualPositionSeconds = Math.min(Math.max(0, visualPositionSeconds), trackDurationSeconds);
+		setProgress((state.visualSec / state.durationSec) * 100, true);
 
-		const percent = (visualPositionSeconds / trackDurationSeconds) * 100;
-
-		setProgress(percent, true);
-		if (visualPositionSeconds >= trackDurationSeconds - 0.5) {
-			stopProgressTicker();
-		}
+		if (state.visualSec >= state.durationSec - 0.5) stopTicker();
 	};
 
 	const tickProgress = () => {
 		if (!document.contains(root)) {
-			stopProgressTicker();
+			stopTicker();
 			return;
 		}
-
 		renderEstimatedProgress();
-		if (progressTickerId !== null) {
-			progressTickerId = window.requestAnimationFrame(tickProgress);
+		if (state.tickerId !== null) {
+			state.tickerId = window.requestAnimationFrame(tickProgress);
 		}
 	};
 
-	const startProgressTicker = () => {
-		if (progressTickerId !== null) return;
-		lastTickTime = Date.now();
-		progressTickerId = window.requestAnimationFrame(tickProgress);
+	const startTicker = () => {
+		if (state.tickerId !== null) return;
+		state.lastTick = Date.now();
+		state.tickerId = window.requestAnimationFrame(tickProgress);
 	};
 
-	const setProgressSnapshot = (progress, durationSeconds, shouldShow, trackKey) => {
-		if (!shouldShow || !progress || typeof progress.positionSeconds !== "number" ||
-			typeof durationSeconds !== "number" || durationSeconds <= 0) {
-			resetProgressState();
-			stopProgressTicker();
+	const setProgressSnapshot = (progress, durationSec, shouldShow, trackKey) => {
+		if (!shouldShow || !progress || typeof progress.positionSeconds !== "number" || typeof durationSec !== "number" || durationSec <= 0) {
+			resetProgress();
+			stopTicker();
 			setProgress(0, false);
 			return;
 		}
 
-		trackDurationSeconds = durationSeconds;
-		const rawSeconds = Math.max(0, progress.positionSeconds);
-		const incomingMinutesAgo = Math.max(0, Math.floor(rawSeconds / 60));
+		state.durationSec = durationSec;
+		const rawSec = Math.max(0, progress.positionSeconds);
+		const minsAgo = Math.max(0, Math.floor(rawSec / 60));
 
-		if (trackKey !== currentTrackKey) {
-			currentTrackKey = trackKey;
-			lastKnownMinutesAgo = incomingMinutesAgo;
-			isSynced = false;
+		if (trackKey !== state.trackKey) {
+			state.trackKey = trackKey;
+			state.lastMinsAgo = minsAgo;
+			state.isSynced = false;
 
-			const midpointGuess = incomingMinutesAgo === 0 ? 0 : rawSeconds + 30;
-			targetPositionSeconds = Math.min(midpointGuess, trackDurationSeconds);
-			visualPositionSeconds = Math.min(rawSeconds, trackDurationSeconds);
-			lastTickTime = Date.now();
-		} else if (incomingMinutesAgo > lastKnownMinutesAgo || incomingMinutesAgo < lastKnownMinutesAgo) {
-			// Boundary detection: once the minute bucket changes, we know the exact snapped position.
-			targetPositionSeconds = Math.min(incomingMinutesAgo * 60, trackDurationSeconds);
-			lastKnownMinutesAgo = incomingMinutesAgo;
-			isSynced = true;
+			const midpointGuess = minsAgo === 0 ? 0 : rawSec + 30;
+			state.targetSec = Math.min(midpointGuess, state.durationSec);
+			state.visualSec = Math.min(rawSec, state.durationSec);
+			state.lastTick = Date.now();
+		} else if (minsAgo !== state.lastMinsAgo) {
+			state.targetSec = Math.min(minsAgo * 60, state.durationSec);
+			state.lastMinsAgo = minsAgo;
+			state.isSynced = true;
 		}
 
 		renderEstimatedProgress();
-		startProgressTicker();
+		startTicker();
 	};
 
-	const formatRelativeTime = (isoTimestamp) => {
-		const timestamp = Date.parse(isoTimestamp);
-		if (Number.isNaN(timestamp)) return "";
+	const formatRelativeTime = (iso) => {
+		const ts = Date.parse(iso);
+		if (Number.isNaN(ts)) return "";
 
-		const minutes = Math.max(1, Math.floor((Date.now() - timestamp) / 60_000));
-		if (minutes < 60) return `${minutes}m ago`;
+		const mins = Math.max(1, Math.floor((Date.now() - ts) / 60_000));
+		if (mins < 60) return `${mins}m ago`;
 
-		const hours = Math.floor(minutes / 60);
-		if (hours < 24) return `${hours}h ago`;
+		const hrs = Math.floor(mins / 60);
+		if (hrs < 24) return `${hrs}h ago`;
 
-		const days = Math.floor(hours / 24);
-		return `${days}d ago`;
+		return `${Math.floor(hrs / 24)}d ago`;
 	};
 
 	const renderData = (payload) => {
-		if (!(statusEl instanceof HTMLElement) || !(trackEl instanceof HTMLElement) ||
-			!(metaEl instanceof HTMLElement) || !(timeEl instanceof HTMLElement)) {
-			return;
-		}
+		clearLoading();
 
-		clearLoadingTimeout();
+		if (!payload?.track) return setIdleState("Not listening right now");
 
-		if (!payload || !payload.track) {
-			setIdleState("Not listening right now");
-			return;
-		}
+		const { track, source, lastPlayedAt } = payload;
 
-		statusEl.hidden = true;
-		trackEl.hidden = false;
-		metaEl.hidden = false;
-		setCover(payload.track.coverArtUrl);
+		if (els.status) els.status.hidden = true;
+		if (els.track) els.track.hidden = false;
+		if (els.meta) els.meta.hidden = false;
+
+		setCover(track.coverArtUrl);
 		markReady();
 
-		const trackTitle = payload.track.title || "Unknown track";
-		const trackMeta = `${payload.track.artist || "Unknown artist"} - ${payload.track.album || "Unknown album"}`;
+		const title = track.title || "Unknown track";
+		const metaStr = `${track.artist || "Unknown artist"} - ${track.album || "Unknown album"}`;
 
-		if (payload.source === "playing") {
-			setTextContent(trackEl, trackTitle);
-			setTextContent(metaEl, trackMeta);
+		if (source === "playing") {
+			setTextContent(els.track, title);
+			setTextContent(els.meta, metaStr);
 			setLabelText("Now listening");
-			timeEl.hidden = true;
-			setProgressSnapshot(payload.progress, payload.track.durationSeconds, true, getTrackKey(payload.track));
+			if (els.time) els.time.hidden = true;
+			setProgressSnapshot(payload.progress, track.durationSeconds, true, getTrackKey(track));
 			return;
 		}
 
-		setTextContent(trackEl, payload.track.album || "Unknown album");
-		setTextContent(metaEl, payload.track.artist || "Unknown artist");
+		setTextContent(els.track, track.album || "Unknown album");
+		setTextContent(els.meta, track.artist || "Unknown artist");
 		setLabelText("Last listened album");
 		setProgressSnapshot(null, null, false, null);
 
-		const relativeTime = formatRelativeTime(payload.lastPlayedAt);
-		if (!relativeTime) {
-			timeEl.hidden = true;
-			return;
+		const relTime = formatRelativeTime(lastPlayedAt);
+		if (els.time) {
+			els.time.hidden = !relTime;
+			if (relTime) els.time.textContent = relTime;
 		}
-
-		timeEl.hidden = false;
-		timeEl.textContent = relativeTime;
 	};
 
 	const fetchNowPlaying = async () => {
 		if (!document.contains(root)) return;
 
-		const requestId = ++latestRequestId;
+		const reqId = ++state.reqId;
 		showLoadingWithDelay();
 
 		try {
-			const response = await fetch(endpoint, {
+			const res = await fetch(endpoint, {
 				headers: { Accept: "application/json" },
 				cache: "no-store",
 			});
 
-			if (requestId !== latestRequestId) return;
+			if (reqId !== state.reqId) return;
 
-			if (!response.ok) {
-				clearLoadingTimeout();
-				setIdleState("Unable to load current track");
-				scheduleNextFetch(refreshMs);
-				return;
-			}
+			if (!res.ok) throw new Error("Fetch failed");
 
-			const payload = await response.json();
-			if (requestId !== latestRequestId) return;
+			const payload = await res.json();
+			if (reqId !== state.reqId) return;
 
 			renderData(payload);
+
 			let nextDelay = idleRefreshMs;
-
 			if (payload?.isPlaying) {
-				const secondsToNextBoundary = ((lastKnownMinutesAgo + 1) * 60) - targetPositionSeconds;
-				const secondsToEnd = Math.max(0, trackDurationSeconds - targetPositionSeconds);
+				const secsToNextBound = ((state.lastMinsAgo + 1) * 60) - state.targetSec;
+				const secsToEnd = Math.max(0, state.durationSec - state.targetSec);
 
-				if (isSynced) {
-					// Once synced to a bucket flip, hit just after the next expected boundary/end.
-					const nextEventSeconds = Math.min(secondsToNextBoundary, secondsToEnd);
-					nextDelay = (nextEventSeconds + 1.5) * 1000;
+				if (state.isSynced) {
+					nextDelay = (Math.min(secsToNextBound, secsToEnd) + 1.5) * 1000;
 				} else {
-					// Unsynced mode narrows uncertainty window as we approach the next boundary.
-					const stallPoint = (lastKnownMinutesAgo + 1) * 60;
-					const secondsToStall = Math.max(0, stallPoint - targetPositionSeconds);
-					if (secondsToStall > 0) {
-						nextDelay = (secondsToStall / 2) * 1000;
-					} else {
-						nextDelay = 5_000;
-					}
+					const secsToStall = Math.max(0, ((state.lastMinsAgo + 1) * 60) - state.targetSec);
+					nextDelay = secsToStall > 0 ? (secsToStall / 2) * 1000 : 5000;
 				}
-
-				nextDelay = Math.min(refreshMs, nextDelay);
-				nextDelay = Math.max(2_000, nextDelay);
+				nextDelay = Math.max(2_000, Math.min(refreshMs, nextDelay));
 			}
 
 			scheduleNextFetch(nextDelay);
-		} catch (_error) {
-			if (requestId !== latestRequestId) return;
-			clearLoadingTimeout();
+		} catch {
+			if (reqId !== state.reqId) return;
+			clearLoading();
 			setIdleState("Unable to load current track");
 			scheduleNextFetch(refreshMs);
 		}
