@@ -387,7 +387,7 @@ const initialStatusText = hasSeedPayload && !hasTrack ? "Not listening right now
 		} catch {
 			if (reqId !== state.reqId) return;
 			clearLoading();
-			setIdleState("Unable to load current track");
+			setIdleState("Unable to load now-playing widget");
 			scheduleNextFetch(refreshMs);
 		}
 	};
