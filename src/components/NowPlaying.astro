@@ -9,6 +9,9 @@ export interface Props {
 const { endpoint = "/api/now-playing.json", refreshMs = 10_000 } = Astro.props;
 const widgetId = `now-playing-${Math.random().toString(36).slice(2, 10)}`;
 let initialPayload: any = null;
+
+// Attempt to fetch the initial payload during Server-Side Rendering (SSR).
+// This prevents layout shifts and provides a snappy initial load.
 try {
 	const res = (await GET(Astro as any)) as Response;
 	if (res.ok) {
@@ -16,12 +19,15 @@ try {
 	}
 } catch {
 	// Fall back to client fetch if the server-side seed fails.
+	// The client-side script will take over and attempt to fetch on mount.
 }
 
+// Derive initial UI state from the SSR payload
 const hasSeedPayload = initialPayload !== null;
 const track = initialPayload?.track;
 const hasTrack = Boolean(track);
 const isPlaying = initialPayload?.source === "playing";
+
 const title = track?.title || "Unknown track";
 const artist = track?.artist || "Unknown artist";
 const album = track?.album || "Unknown album";
@@ -31,6 +37,7 @@ const trackDisplay = isPlaying ? title : album;
 const labelText = isPlaying ? "Now listening" : "Last listened album";
 const coverUrl = track?.coverArtUrl || "data:,";
 const progressScale = isPlaying ? (initialPayload?.progress?.percent ?? 0) / 100 : 0;
+
 const showInitialStatus = hasSeedPayload && !hasTrack;
 const initialStatusText = showInitialStatus ? "Not listening right now" : "Loading...";
 ---
@@ -47,6 +54,7 @@ const initialStatusText = showInitialStatus ? "Not listening right now" : "Loadi
 		<p class="now-playing__label" data-label>{labelText}</p>
 		<p class="now-playing__time" data-time hidden={!hasTrack || isPlaying}></p>
 	</div>
+
 	<div class="now-playing__content">
 		<div class="now-playing__cover-wrap" data-cover-wrap hidden={!hasTrack}>
 			<img class="now-playing__cover" data-cover src={coverUrl} alt="Album artwork" loading="lazy" decoding="async" />
@@ -57,6 +65,7 @@ const initialStatusText = showInitialStatus ? "Not listening right now" : "Loadi
 			<p class="now-playing__meta" data-meta hidden={!hasTrack}>{metaStr}</p>
 		</div>
 	</div>
+
 	<div class="now-playing__progress" data-progress hidden={!isPlaying}>
 		<div class="now-playing__progress-bar" data-progress-bar style={`transform: scaleX(${progressScale})`}></div>
 	</div>
@@ -69,14 +78,20 @@ const initialStatusText = showInitialStatus ? "Not listening right now" : "Loadi
 	const endpoint = root.dataset.endpoint ?? "/api/now-playing.json";
 	const refreshMs = Number(root.dataset.refreshMs ?? "10000");
 
+	/**
+	 * Configuration for the predictive polling and animation state machine.
+	 * This handles scenarios where the API only updates in "chunks" (quanta)
+	 * rather than every second, preventing unnecessary API spam.
+	 */
 	const CFG = {
-		QUANTUM_SEC: 60,              // Boundary chunks
-		MIN_POLL_SEC: 1.5,            // The lowest poll rate limit
-		END_WINDOW_EXTRA_SEC: 1.0,    // Extra buffer added to uncertainty at end of song
-		END_POLL_RATE_SEC: 2.0,       // Burst polling rate at song boundary
-		IDLE_POLL_SEC: 30             // Idle polling when stopped
+		QUANTUM_SEC: 60,              // Expected boundary chunks (e.g., API progress updates every 60s)
+		MIN_POLL_SEC: 1.5,            // The absolute minimum time between API polls
+		END_WINDOW_EXTRA_SEC: 1.0,    // Extra buffer added to uncertainty when nearing the end of a song
+		END_POLL_RATE_SEC: 2.0,       // Fast polling rate used exclusively when crossing track boundaries
+		IDLE_POLL_SEC: 30             // Slower polling rate when music is paused/stopped
 	};
 
+	// DOM Selectors
 	const $ = (selector) => root.querySelector(selector);
 	const els = {
 		status: $("[data-status]"),
@@ -90,28 +105,31 @@ const initialStatusText = showInitialStatus ? "Not listening right now" : "Loadi
 		progressBar: $("[data-progress-bar]")
 	};
 
+	// Application State
 	const state = {
 		hasLoaded: false,
-		tickerId: null,
-		fetchId: null,
-		loadingId: null,
-		trackKey: null,
+		tickerId: null,   // requestAnimationFrame ID for progress bar
+		fetchId: null,    // setTimeout ID for next API poll
+		loadingId: null,  // setTimeout ID for delayed loading text
+		trackKey: null,   // Unique identifier to detect when the actual song changes
+		reqId: 0,         // Request counter to ignore stale fetch responses
 
-		basePosition: 0,
-		baseTimestamp: Date.now(),
+		// Predictive Progress State
+		basePosition: 0,       // The last known exact position from the API (in seconds)
+		baseTimestamp: Date.now(), // When we received the basePosition
 		uncertaintySec: CFG.QUANTUM_SEC,
-		pollRateSec: 12.0,
+		pollRateSec: 12.0,     // Current dynamic polling delay
 
-		visualSec: 0,
-		durationSec: 0,
-		lastTick: Date.now(),
-
-		reqId: 0
+		visualSec: 0,          // The current position shown on the visual progress bar
+		durationSec: 0,        // Total track duration
+		lastTick: Date.now(),  // Timestamp of the last animation frame
 	};
 
+	// --- Utilities ---
 	const clampPercent = (value) => Math.max(0, Math.min(100, value));
 	const getTrackKey = (t) => JSON.stringify([t?.title, t?.artist, t?.album, t?.coverArtId, t?.durationSeconds]);
 
+	// --- Timers & Clears ---
 	const stopTicker = () => {
 		if (state.tickerId === null) return;
 		window.cancelAnimationFrame(state.tickerId);
@@ -142,12 +160,7 @@ const initialStatusText = showInitialStatus ? "Not listening right now" : "Loadi
 		});
 	};
 
-	const scheduleNextFetch = (delayMs) => {
-		clearFetch();
-		if (!document.contains(root)) return;
-		state.fetchId = window.setTimeout(() => void fetchNowPlaying(), Math.max(1000, delayMs));
-	};
-
+	// --- UI Updaters ---
 	const markReady = () => {
 		if (state.hasLoaded) return;
 		state.hasLoaded = true;
@@ -158,6 +171,7 @@ const initialStatusText = showInitialStatus ? "Not listening right now" : "Loadi
 		clearLoading();
 		if (!els.status) return;
 
+		// Prevent layout flicker by waiting slightly before showing "Loading"
 		state.loadingId = window.setTimeout(() => {
 			els.status.textContent = "Loading...";
 			els.status.hidden = false;
@@ -183,6 +197,7 @@ const initialStatusText = showInitialStatus ? "Not listening right now" : "Loadi
 			els.status.textContent = message;
 			els.status.hidden = false;
 		}
+
 		if (els.track) els.track.hidden = true;
 		if (els.meta) els.meta.hidden = true;
 		if (els.time) els.time.hidden = true;
@@ -237,6 +252,13 @@ const initialStatusText = showInitialStatus ? "Not listening right now" : "Loadi
 		els.progressBar.style.transform = `scaleX(${clampPercent(percent) / 100})`;
 	};
 
+	// --- Animation & Predictive Logic ---
+
+	/**
+	 * Calculates and renders the progress bar based on estimated time passed.
+	 * Includes "catch up" and "coast" logic to handle discrepancies between
+	 * the smooth visual progress and chunked API updates.
+	 */
 	const renderEstimatedProgress = () => {
 		if (state.durationSec <= 0) return;
 
@@ -248,16 +270,20 @@ const initialStatusText = showInitialStatus ? "Not listening right now" : "Loadi
 		const maxAllowedSec = state.basePosition + CFG.QUANTUM_SEC;
 		const targetSec = Math.min(state.basePosition + elapsedSinceBaseSec, maxAllowedSec, state.durationSec);
 
+		// Distance between our visual bar and the estimated real position
 		const distanceSec = targetSec - state.visualSec;
 
 		let speed = 1.0;
 		if (distanceSec > 0.5) {
-			speed = 1.0 + (distanceSec / 5.0); // Smooth catch-up
+			// Visuals are behind: smoothly speed up to catch up
+			speed = 1.0 + (distanceSec / 5.0);
 		} else if (distanceSec < -5.0) {
-			state.visualSec = targetSec; // Hard reset on big leaps (like rewinding)
+			// Visuals are vastly ahead (e.g. user rewound the track): hard reset position
+			state.visualSec = targetSec;
 			speed = 1.0;
 		} else if (distanceSec < 0) {
-			speed = 0.5; // Coast if slightly ahead of boundary target
+			// Visuals are slightly ahead: slow down and let real time catch up
+			speed = 0.5;
 		}
 
 		state.visualSec += speed * deltaTickSec;
@@ -295,9 +321,22 @@ const initialStatusText = showInitialStatus ? "Not listening right now" : "Loadi
 		return `${Math.floor(hrs / 24)}d ago`;
 	};
 
+	// --- Core Network & State Handling ---
+
+	const scheduleNextFetch = (delayMs) => {
+		clearFetch();
+		if (!document.contains(root)) return;
+		state.fetchId = window.setTimeout(() => void fetchNowPlaying(), Math.max(1000, delayMs));
+	};
+
+	/**
+	 * Ingests a payload from the API, updates UI state, and calculates
+	 * the most optimal delay before the next API fetch.
+	 */
 	const handlePayload = (payload, fetchStartMs) => {
 		clearLoading();
 
+		// 1. Handle Empty/Idle State
 		if (!payload?.track) {
 			setIdleState("Not listening right now");
 			return CFG.IDLE_POLL_SEC * 1000;
@@ -315,6 +354,7 @@ const initialStatusText = showInitialStatus ? "Not listening right now" : "Loadi
 		const title = track.title || "Unknown track";
 		const metaStr = `${track.artist || "Unknown artist"} - ${track.album || "Unknown album"}`;
 
+		// 2. Handle Paused / Historic Playback
 		if (source !== "playing") {
 			setTextContent(els.track, track.album || "Unknown album");
 			setTextContent(els.meta, track.artist || "Unknown artist");
@@ -332,7 +372,7 @@ const initialStatusText = showInitialStatus ? "Not listening right now" : "Loadi
 			return CFG.IDLE_POLL_SEC * 1000;
 		}
 
-		// Track is actively playing
+		// 3. Handle Active Playback
 		setTextContent(els.track, title);
 		setTextContent(els.meta, metaStr);
 		setLabelText("Now listening");
@@ -345,7 +385,7 @@ const initialStatusText = showInitialStatus ? "Not listening right now" : "Loadi
 
 		let triggerBoundarySleep = false;
 
-		// Sync State Machine
+		// State Machine: Detect song changes, rewinds, or natural chunk progression
 		if (trackKey !== state.trackKey) {
 			const isFirstLoad = state.trackKey === null;
 			state.trackKey = trackKey;
@@ -357,7 +397,7 @@ const initialStatusText = showInitialStatus ? "Not listening right now" : "Loadi
 				state.uncertaintySec = CFG.QUANTUM_SEC;
 				state.pollRateSec = 12.0;
 			} else {
-				// NEW SONG DETECTED: Assume we are already synced!
+				// NEW SONG DETECTED: Assume we are already synced via webhooks/cache!
 				state.uncertaintySec = 3.0;
 				state.pollRateSec = 1.5;
 				triggerBoundarySleep = true;
@@ -369,7 +409,7 @@ const initialStatusText = showInitialStatus ? "Not listening right now" : "Loadi
 			state.uncertaintySec = CFG.QUANTUM_SEC;
 			state.pollRateSec = 12.0;
 		} else if (rawSec > state.basePosition) {
-			// Standard chunk boundary crossed!
+			// Standard chunk boundary crossed (normal playback progression)
 			state.basePosition = rawSec;
 			state.baseTimestamp = timestamp;
 			state.uncertaintySec = state.pollRateSec;
@@ -389,15 +429,16 @@ const initialStatusText = showInitialStatus ? "Not listening right now" : "Loadi
 		let nextDelayMs;
 
 		if (triggerBoundarySleep) {
-			// 1. Chunk changed (or synced new track): calculate safe sleep
+			// Chunk changed (or synced new track): calculate maximum safe sleep
 			const sleepSec = CFG.QUANTUM_SEC - state.uncertaintySec;
 			nextDelayMs = sleepSec * 1000;
 		} else {
-			// 2. Normal mid-chunk polling
+			// Normal mid-chunk polling: fallback to standard dynamic poll rate
 			nextDelayMs = state.pollRateSec * 1000;
 		}
 
-		// 3. CRITICAL: Ensure we never sleep through the end-of-song window.
+		// CRITICAL: Ensure we never sleep through the end-of-song window.
+		// We want to burst-poll right as the track naturally ends to catch the next song instantly.
 		const currentEndWindowSec = state.uncertaintySec + CFG.END_WINDOW_EXTRA_SEC;
 
 		if (state.durationSec > 0) {
@@ -405,7 +446,7 @@ const initialStatusText = showInitialStatus ? "Not listening right now" : "Loadi
 				// Inside the end-of-song boundary override with burst poll.
 				nextDelayMs = CFG.END_POLL_RATE_SEC * 1000;
 			} else {
-				// Cap current sleep to guarantee we wake up exactly as the end-window begins.
+				// Cap the current sleep delay to guarantee we wake up exactly as the end-window begins.
 				const timeUntilEndWindowMs = (remainingSec - currentEndWindowSec) * 1000;
 				nextDelayMs = Math.max(CFG.END_POLL_RATE_SEC * 1000, Math.min(nextDelayMs, timeUntilEndWindowMs));
 			}
@@ -417,7 +458,7 @@ const initialStatusText = showInitialStatus ? "Not listening right now" : "Loadi
 	const fetchNowPlaying = async () => {
 		if (!document.contains(root)) return;
 
-		const reqId = ++state.reqId;
+		const reqId = ++state.reqId; // Keep track of current request to avoid race conditions
 		if (!state.hasLoaded) showLoadingWithDelay();
 
 		const fetchStartMs = Date.now();
@@ -428,6 +469,7 @@ const initialStatusText = showInitialStatus ? "Not listening right now" : "Loadi
 				cache: "no-store",
 			});
 
+			// Abort if a newer request was initiated while this one was pending
 			if (reqId !== state.reqId) return;
 			if (!res.ok) throw new Error("Fetch failed");
 
@@ -441,15 +483,19 @@ const initialStatusText = showInitialStatus ? "Not listening right now" : "Loadi
 			if (reqId !== state.reqId) return;
 			clearLoading();
 			setIdleState("Unable to load now-playing widget");
+
+			// On failure, fall back to the default fallback refresh rate
 			scheduleNextFetch(refreshMs);
 		}
 	};
 
-	// Initialize
+	// --- Initialization ---
 	if (initialPayload) {
+		// If SSR provided data, bootstrap immediately without fetching
 		const nextDelayMs = handlePayload(initialPayload, Date.now());
 		scheduleNextFetch(nextDelayMs);
 	} else {
+		// Otherwise, kick off a client-side fetch
 		void fetchNowPlaying();
 	}
 </script>
