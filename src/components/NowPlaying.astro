@@ -86,7 +86,7 @@ const initialStatusText = showInitialStatus ? "Not listening right now" : "Loadi
 	const CFG = {
 		QUANTUM_SEC: 60,              // Expected boundary chunks (e.g., API progress updates every 60s)
 		MIN_POLL_SEC: 1.5,            // The absolute minimum time between API polls
-		END_WINDOW_EXTRA_SEC: 1.0,    // Extra buffer added to uncertainty when nearing the end of a song
+		END_WINDOW_EXTRA_SEC: 0.5,    // Extra buffer added to uncertainty when nearing the end of a song
 		END_POLL_RATE_SEC: 2.0,       // Fast polling rate used exclusively when crossing track boundaries
 		IDLE_POLL_SEC: 30             // Slower polling rate when music is paused/stopped
 	};
