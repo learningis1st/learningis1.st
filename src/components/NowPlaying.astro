@@ -8,7 +8,6 @@ export interface Props {
 
 const { endpoint = "/api/now-playing.json", refreshMs = 10_000 } = Astro.props;
 const widgetId = `now-playing-${Math.random().toString(36).slice(2, 10)}`;
-
 let initialPayload: any = null;
 try {
 	const res = (await GET(Astro as any)) as Response;
@@ -23,7 +22,6 @@ const hasSeedPayload = initialPayload !== null;
 const track = initialPayload?.track;
 const hasTrack = Boolean(track);
 const isPlaying = initialPayload?.source === "playing";
-
 const title = track?.title || "Unknown track";
 const artist = track?.artist || "Unknown artist";
 const album = track?.album || "Unknown album";
@@ -70,7 +68,14 @@ const initialStatusText = showInitialStatus ? "Not listening right now" : "Loadi
 
 	const endpoint = root.dataset.endpoint ?? "/api/now-playing.json";
 	const refreshMs = Number(root.dataset.refreshMs ?? "10000");
-	const idleRefreshMs = 30_000;
+
+	const CFG = {
+		QUANTUM_SEC: 60,              // Boundary chunks
+		MIN_POLL_SEC: 1.5,            // The lowest poll rate limit
+		END_WINDOW_EXTRA_SEC: 5.0,    // Extra buffer added to uncertainty at end of song
+		END_POLL_RATE_SEC: 2.0,       // Burst polling rate at song boundary
+		IDLE_POLL_SEC: 30             // Idle polling when stopped
+	};
 
 	const $ = (selector) => root.querySelector(selector);
 	const els = {
@@ -91,13 +96,17 @@ const initialStatusText = showInitialStatus ? "Not listening right now" : "Loadi
 		fetchId: null,
 		loadingId: null,
 		trackKey: null,
-		targetSec: 0,
+
+		basePosition: 0,
+		baseTimestamp: Date.now(),
+		uncertaintySec: CFG.QUANTUM_SEC,
+		pollRateSec: 12.0,
+
 		visualSec: 0,
-		lastMinsAgo: 0,
-		lastTick: Date.now(),
 		durationSec: 0,
-		reqId: 0,
-		isSynced: false
+		lastTick: Date.now(),
+
+		reqId: 0
 	};
 
 	const clampPercent = (value) => Math.max(0, Math.min(100, value));
@@ -123,20 +132,20 @@ const initialStatusText = showInitialStatus ? "Not listening right now" : "Loadi
 
 	const resetProgress = () => {
 		Object.assign(state, {
-			targetSec: 0,
+			basePosition: 0,
+			baseTimestamp: Date.now(),
+			uncertaintySec: CFG.QUANTUM_SEC,
+			pollRateSec: 12.0,
 			visualSec: 0,
-			lastMinsAgo: 0,
-			lastTick: Date.now(),
 			durationSec: 0,
-			trackKey: null,
-			isSynced: false
+			trackKey: null
 		});
 	};
 
 	const scheduleNextFetch = (delayMs) => {
 		clearFetch();
 		if (!document.contains(root)) return;
-		state.fetchId = window.setTimeout(() => void fetchNowPlaying(), Math.max(1_000, delayMs));
+		state.fetchId = window.setTimeout(() => void fetchNowPlaying(), Math.max(1000, delayMs));
 	};
 
 	const markReady = () => {
@@ -232,27 +241,35 @@ const initialStatusText = showInitialStatus ? "Not listening right now" : "Loadi
 		if (state.durationSec <= 0) return;
 
 		const now = Date.now();
-		const elapsedSec = Math.max(0, (now - state.lastTick) / 1000);
+		const deltaTickSec = Math.max(0, (now - state.lastTick) / 1000);
 		state.lastTick = now;
 
-		state.targetSec += elapsedSec;
-		const maxAllowed = Math.max(0, ((state.lastMinsAgo + 1) * 60) - 1);
-		state.targetSec = Math.min(state.targetSec, maxAllowed, state.durationSec);
+		const elapsedSinceBaseSec = Math.max(0, (now - state.baseTimestamp) / 1000);
+		const maxAllowedSec = state.basePosition + CFG.QUANTUM_SEC;
+		const targetSec = Math.min(state.basePosition + elapsedSinceBaseSec, maxAllowedSec, state.durationSec);
 
-		const distance = state.targetSec - state.visualSec;
-		state.visualSec += distance * 0.1;
-		state.visualSec = Math.min(Math.max(0, state.visualSec), state.durationSec);
+		const distanceSec = targetSec - state.visualSec;
+
+		let speed = 1.0;
+		if (distanceSec > 0.5) {
+			speed = 1.0 + (distanceSec / 5.0); // Smooth catch-up
+		} else if (distanceSec < -5.0) {
+			state.visualSec = targetSec; // Hard reset on big leaps (like rewinding)
+			speed = 1.0;
+		} else if (distanceSec < 0) {
+			speed = 0.5; // Coast if slightly ahead of boundary target
+		}
+
+		state.visualSec += speed * deltaTickSec;
+		state.visualSec = Math.max(0, Math.min(state.visualSec, state.durationSec));
 
 		setProgress((state.visualSec / state.durationSec) * 100, true);
 
-		if (state.visualSec >= state.durationSec - 0.5) stopTicker();
+		if (state.visualSec >= state.durationSec) stopTicker();
 	};
 
 	const tickProgress = () => {
-		if (!document.contains(root)) {
-			stopTicker();
-			return;
-		}
+		if (!document.contains(root)) return stopTicker();
 		renderEstimatedProgress();
 		if (state.tickerId !== null) {
 			state.tickerId = window.requestAnimationFrame(tickProgress);
@@ -265,42 +282,11 @@ const initialStatusText = showInitialStatus ? "Not listening right now" : "Loadi
 		state.tickerId = window.requestAnimationFrame(tickProgress);
 	};
 
-	const setProgressSnapshot = (progress, durationSec, shouldShow, trackKey) => {
-		if (!shouldShow || !progress || typeof progress.positionSeconds !== "number" || typeof durationSec !== "number" || durationSec <= 0) {
-			resetProgress();
-			stopTicker();
-			setProgress(0, false);
-			return;
-		}
-
-		state.durationSec = durationSec;
-		const rawSec = Math.max(0, progress.positionSeconds);
-		const minsAgo = Math.max(0, Math.floor(rawSec / 60));
-
-		if (trackKey !== state.trackKey) {
-			state.trackKey = trackKey;
-			state.lastMinsAgo = minsAgo;
-			state.isSynced = false;
-
-			const midpointGuess = minsAgo === 0 ? 0 : rawSec + 30;
-			state.targetSec = Math.min(midpointGuess, state.durationSec);
-			state.visualSec = Math.min(rawSec, state.durationSec);
-			state.lastTick = Date.now();
-		} else if (minsAgo !== state.lastMinsAgo) {
-			state.targetSec = Math.min(minsAgo * 60, state.durationSec);
-			state.lastMinsAgo = minsAgo;
-			state.isSynced = true;
-		}
-
-		renderEstimatedProgress();
-		startTicker();
-	};
-
 	const formatRelativeTime = (iso) => {
 		const ts = Date.parse(iso);
 		if (Number.isNaN(ts)) return "";
 
-		const mins = Math.max(1, Math.floor((Date.now() - ts) / 60_000));
+		const mins = Math.max(1, Math.floor((Date.now() - ts) / 60000));
 		if (mins < 60) return `${mins}m ago`;
 
 		const hrs = Math.floor(mins / 60);
@@ -309,10 +295,13 @@ const initialStatusText = showInitialStatus ? "Not listening right now" : "Loadi
 		return `${Math.floor(hrs / 24)}d ago`;
 	};
 
-	const renderData = (payload) => {
+	const handlePayload = (payload, fetchStartMs) => {
 		clearLoading();
 
-		if (!payload?.track) return setIdleState("Not listening right now");
+		if (!payload?.track) {
+			setIdleState("Not listening right now");
+			return CFG.IDLE_POLL_SEC * 1000;
+		}
 
 		const { track, source, lastPlayedAt } = payload;
 
@@ -326,41 +315,103 @@ const initialStatusText = showInitialStatus ? "Not listening right now" : "Loadi
 		const title = track.title || "Unknown track";
 		const metaStr = `${track.artist || "Unknown artist"} - ${track.album || "Unknown album"}`;
 
-		if (source === "playing") {
-			setTextContent(els.track, title);
-			setTextContent(els.meta, metaStr);
-			setLabelText("Now listening");
-			if (els.time) els.time.hidden = true;
-			setProgressSnapshot(payload.progress, track.durationSeconds, true, getTrackKey(track));
-			return;
+		if (source !== "playing") {
+			setTextContent(els.track, track.album || "Unknown album");
+			setTextContent(els.meta, track.artist || "Unknown artist");
+			setLabelText("Last listened album");
+
+			resetProgress();
+			stopTicker();
+			setProgress(0, false);
+
+			const relTime = formatRelativeTime(lastPlayedAt);
+			if (els.time) {
+				els.time.hidden = !relTime;
+				if (relTime) els.time.textContent = relTime;
+			}
+			return CFG.IDLE_POLL_SEC * 1000;
 		}
 
-		setTextContent(els.track, track.album || "Unknown album");
-		setTextContent(els.meta, track.artist || "Unknown artist");
-		setLabelText("Last listened album");
-		setProgressSnapshot(null, null, false, null);
+		// Track is actively playing
+		setTextContent(els.track, title);
+		setTextContent(els.meta, metaStr);
+		setLabelText("Now listening");
+		if (els.time) els.time.hidden = true;
 
-		const relTime = formatRelativeTime(lastPlayedAt);
-		if (els.time) {
-			els.time.hidden = !relTime;
-			if (relTime) els.time.textContent = relTime;
+		const trackKey = getTrackKey(track);
+		const rawSec = Math.max(0, payload.progress?.positionSeconds || 0);
+		const durationSec = track.durationSeconds || 0;
+		const timestamp = fetchStartMs || Date.now();
+
+		let triggerBoundarySleep = false;
+
+		// Sync State Machine
+		if (trackKey !== state.trackKey) {
+			const isFirstLoad = state.trackKey === null;
+			state.trackKey = trackKey;
+			state.basePosition = rawSec;
+			state.baseTimestamp = timestamp;
+			state.visualSec = rawSec;
+
+			if (isFirstLoad) {
+				state.uncertaintySec = CFG.QUANTUM_SEC;
+				state.pollRateSec = 12.0;
+			} else {
+				// NEW SONG DETECTED: Assume we are already synced!
+				state.uncertaintySec = 3.0;
+				state.pollRateSec = 1.5;
+				triggerBoundarySleep = true;
+			}
+		} else if (rawSec < state.basePosition) {
+			// Rewind detected
+			state.basePosition = rawSec;
+			state.baseTimestamp = timestamp;
+			state.uncertaintySec = CFG.QUANTUM_SEC;
+			state.pollRateSec = 12.0;
+		} else if (rawSec > state.basePosition) {
+			// Standard chunk boundary crossed!
+			state.basePosition = rawSec;
+			state.baseTimestamp = timestamp;
+			state.uncertaintySec = state.pollRateSec;
+			state.pollRateSec = Math.max(CFG.MIN_POLL_SEC, state.pollRateSec / 2);
+			triggerBoundarySleep = true;
 		}
-	};
 
-	const calculateNextDelay = (payload) => {
-		if (payload?.source !== "playing") return idleRefreshMs;
+		state.durationSec = durationSec;
+		renderEstimatedProgress();
+		startTicker();
 
-		let nextDelay;
-		const secsToNextBound = ((state.lastMinsAgo + 1) * 60) - state.targetSec;
-		const secsToEnd = Math.max(0, state.durationSec - state.targetSec);
+		// --- Polling Strategy Math ---
+		const elapsedSinceBaseSec = Math.max(0, (Date.now() - state.baseTimestamp) / 1000);
+		const estimatedPos = state.basePosition + elapsedSinceBaseSec;
+		const remainingSec = Math.max(0, state.durationSec - estimatedPos);
 
-		if (state.isSynced) {
-			nextDelay = (Math.min(secsToNextBound, secsToEnd) + 1.5) * 1000;
+		let nextDelayMs;
+
+		if (triggerBoundarySleep) {
+			// 1. Chunk changed (or synced new track): calculate safe sleep
+			const sleepSec = CFG.QUANTUM_SEC - state.uncertaintySec;
+			nextDelayMs = sleepSec * 1000;
 		} else {
-			const secsToStall = Math.max(0, ((state.lastMinsAgo + 1) * 60) - state.targetSec);
-			nextDelay = secsToStall > 0 ? (secsToStall / 2) * 1000 : 5000;
+			// 2. Normal mid-chunk polling
+			nextDelayMs = state.pollRateSec * 1000;
 		}
-		return Math.max(2_000, Math.min(refreshMs, nextDelay));
+
+		// 3. CRITICAL: Ensure we never sleep through the end-of-song window.
+		const currentEndWindowSec = state.uncertaintySec + CFG.END_WINDOW_EXTRA_SEC;
+
+		if (state.durationSec > 0) {
+			if (remainingSec <= currentEndWindowSec) {
+				// Inside the end-of-song boundary override with burst poll.
+				nextDelayMs = CFG.END_POLL_RATE_SEC * 1000;
+			} else {
+				// Cap current sleep to guarantee we wake up exactly as the end-window begins.
+				const timeUntilEndWindowMs = (remainingSec - currentEndWindowSec) * 1000;
+				nextDelayMs = Math.max(CFG.END_POLL_RATE_SEC * 1000, Math.min(nextDelayMs, timeUntilEndWindowMs));
+			}
+		}
+
+		return nextDelayMs;
 	};
 
 	const fetchNowPlaying = async () => {
@@ -368,6 +419,8 @@ const initialStatusText = showInitialStatus ? "Not listening right now" : "Loadi
 
 		const reqId = ++state.reqId;
 		if (!state.hasLoaded) showLoadingWithDelay();
+
+		const fetchStartMs = Date.now();
 
 		try {
 			const res = await fetch(endpoint, {
@@ -381,8 +434,9 @@ const initialStatusText = showInitialStatus ? "Not listening right now" : "Loadi
 			const payload = await res.json();
 			if (reqId !== state.reqId) return;
 
-			renderData(payload);
-			scheduleNextFetch(calculateNextDelay(payload));
+			const nextDelayMs = handlePayload(payload, fetchStartMs);
+			scheduleNextFetch(nextDelayMs);
+
 		} catch {
 			if (reqId !== state.reqId) return;
 			clearLoading();
@@ -391,9 +445,10 @@ const initialStatusText = showInitialStatus ? "Not listening right now" : "Loadi
 		}
 	};
 
+	// Initialize
 	if (initialPayload) {
-		renderData(initialPayload);
-		scheduleNextFetch(calculateNextDelay(initialPayload));
+		const nextDelayMs = handlePayload(initialPayload, Date.now());
+		scheduleNextFetch(nextDelayMs);
 	} else {
 		void fetchNowPlaying();
 	}
