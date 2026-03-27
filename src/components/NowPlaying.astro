@@ -1,0 +1,97 @@
+---
+import { getNowPlayingPayload } from "../lib/now-playing/server";
+
+export interface Props {
+	endpoint?: string;
+	refreshMs?: number;
+}
+
+const { endpoint = "/api/now-playing.json", refreshMs = 10_000 } = Astro.props;
+const widgetId = `now-playing-${Math.random().toString(36).slice(2, 10)}`;
+const labelId = `${widgetId}-label`;
+const announceId = `${widgetId}-announce`;
+let initialPayload: any = null;
+
+// Attempt to fetch the initial payload during Server-Side Rendering (SSR).
+// This prevents layout shifts and provides a snappy initial load.
+try {
+	const runtimeEnv = Astro.locals?.runtime?.env as Env | undefined;
+	if (runtimeEnv) {
+		const { status, payload } = await getNowPlayingPayload(runtimeEnv);
+		if (status >= 200 && status < 300) {
+			initialPayload = payload;
+		}
+	}
+} catch {
+	// Fall back to client fetch if the server-side seed fails.
+	// The client-side script will take over and attempt to fetch on mount.
+}
+
+// Derive initial UI state from the SSR payload
+const hasSeedPayload = initialPayload !== null;
+const track = initialPayload?.track;
+const hasTrack = Boolean(track);
+const isPlaying = initialPayload?.source === "playing";
+
+const title = track?.title || "Unknown track";
+const artist = track?.artist || "Unknown artist";
+const album = track?.album || "Unknown album";
+const albumArtist = track?.albumArtist || artist;
+
+const metaStr = isPlaying ? `${artist} - ${album}` : albumArtist;
+const trackDisplay = isPlaying ? title : album;
+const labelText = isPlaying ? "Now listening" : "Last listened album";
+const coverUrl = track?.coverArtId
+	? `/api/navidrome/cover-art/${encodeURIComponent(track.coverArtId)}`
+	: "data:,";
+const progressScale = isPlaying ? (initialPayload?.progress?.percent ?? 0) / 100 : 0;
+
+const showInitialStatus = hasSeedPayload && !hasTrack;
+const initialStatusText = showInitialStatus ? "Not listening right now" : "Loading...";
+const initialPayloadJson = JSON.stringify(initialPayload);
+---
+
+<section
+	id={widgetId}
+	class="now-playing"
+	role="group"
+	aria-labelledby={labelId}
+	aria-describedby={announceId}
+	data-state={hasSeedPayload ? "ready" : "loading"}
+	data-endpoint={endpoint}
+	data-refresh-ms={String(refreshMs)}
+	data-initial-payload={initialPayloadJson}
+	data-now-playing-widget
+>
+	<div class="now-playing__header">
+		<p id={labelId} class="now-playing__label" data-label>{labelText}</p>
+		<p class="now-playing__time" data-time hidden={!hasTrack || isPlaying}></p>
+	</div>
+
+	<div class="now-playing__content">
+		<div class="now-playing__cover-wrap" data-cover-wrap hidden={!hasTrack}>
+			<img class="now-playing__cover" data-cover src={coverUrl} alt="Album artwork" loading="lazy" decoding="async" />
+		</div>
+		<div class="now-playing__text">
+			<p class="now-playing__status" data-status hidden={!showInitialStatus}>{initialStatusText}</p>
+			<p class="now-playing__track" data-track hidden={!hasTrack}>{trackDisplay}</p>
+			<p class="now-playing__meta" data-meta hidden={!hasTrack}>{metaStr}</p>
+		</div>
+	</div>
+
+	<div class="now-playing__progress" data-progress hidden={!isPlaying} aria-hidden="true">
+		<div class="now-playing__progress-bar" data-progress-bar style={`transform: scaleX(${progressScale})`}></div>
+	</div>
+
+	<p id={announceId} class="sr-only" data-announce aria-live="polite" aria-atomic="true"></p>
+</section>
+
+<script>
+	import { initNowPlayingWidget } from "./now-playing.client";
+	for (const root of document.querySelectorAll("[data-now-playing-widget]")) {
+		if (!(root instanceof HTMLElement)) continue;
+		if (root.dataset.boundNowPlaying === "true") continue;
+		root.dataset.boundNowPlaying = "true";
+		initNowPlayingWidget(root);
+	}
+</script>

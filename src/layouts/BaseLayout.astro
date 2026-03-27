@@ -1,0 +1,34 @@
+---
+import "../styles/global.css";
+import Seo from "../components/Seo.astro";
+
+export interface Props {
+	title: string;
+	description: string;
+	canonical?: string;
+	ogImage?: string;
+	lang?: string;
+}
+
+const { title, description, canonical, ogImage, lang = "en" } = Astro.props;
+const computedCanonical = canonical ?? (Astro.site ? new URL(Astro.url.pathname, Astro.site).toString() : undefined);
+---
+
+<!doctype html>
+<html lang={lang}>
+	<head>
+		<meta charset="utf-8" />
+		<meta name="viewport" content="width=device-width, initial-scale=1" />
+		<title>{title}</title>
+		<Seo
+			title={title}
+			description={description}
+			canonical={computedCanonical}
+			ogImage={ogImage}
+		/>
+	</head>
+	<body>
+		<slot />
+	</body>
+</html>
+

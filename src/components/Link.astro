@@ -1,0 +1,44 @@
+---
+export interface Props {
+  href: string;
+  label: string;
+  type: "social" | "top";
+  icon?: string;
+  iconPath?: string;
+  className?: string;
+}
+
+const {
+  href,
+  label,
+  type,
+  icon,
+  iconPath,
+  className,
+} = Astro.props;
+
+const isSocial = type === "social";
+const isExternal = href.startsWith("http");
+---
+
+<a
+  href={href}
+  class:list={[isSocial ? "link" : "top-link", className]}
+  aria-label={label}
+  title={isSocial ? undefined : label}
+  target={isExternal ? "_blank" : undefined}
+  rel={isExternal ? "noopener noreferrer" : undefined}
+>
+  <svg
+    class={isSocial ? "icon" : "top-icon"}
+    viewBox="0 0 24 24"
+    fill={isSocial ? "currentColor" : "none"}
+    stroke={isSocial ? undefined : "currentColor"}
+    stroke-width={isSocial ? undefined : "1.8"}
+    stroke-linecap={isSocial ? undefined : "round"}
+    stroke-linejoin={isSocial ? undefined : "round"}
+    aria-hidden="true"
+  >
+    {isSocial ? <path d={iconPath} /> : <Fragment set:html={icon} />}
+  </svg>
+</a>

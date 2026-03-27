@@ -1,0 +1,26 @@
+{
+	"name": "learningis1-st",
+	"description": "Personal website",
+	"dependencies": {
+		"@astrojs/cloudflare": "^12.6.13",
+		"astro": "^5.18.1"
+	},
+	"devDependencies": {
+		"typescript": "5.9.3",
+		"wrangler": "^4.77.0"
+	},
+	"engines": {
+		"node": ">=22"
+	},
+	"private": true,
+	"scripts": {
+		"astro": "astro",
+		"build": "astro build",
+		"cf-typegen": "wrangler types",
+		"check": "astro build && tsc && wrangler deploy --dry-run",
+		"deploy": "astro build && wrangler deploy",
+		"dev": "astro dev",
+		"preview": "astro build && wrangler dev"
+	},
+	"type": "module"
+}
