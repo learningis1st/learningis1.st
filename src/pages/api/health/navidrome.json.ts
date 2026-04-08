@@ -1,4 +1,5 @@
 import type { APIRoute } from "astro";
+import { env } from "cloudflare:workers";
 import { buildSubsonicViewUrl, getNavidromeConfig } from "../../../lib/navidrome";
 
 export const prerender = false;
@@ -25,8 +26,8 @@ const isSubsonicOk = (payload: unknown) => {
 	return ((response as Record<string, unknown>).status as string | undefined) === "ok";
 };
 
-export const GET: APIRoute = async ({ locals }) => {
-	const config = getNavidromeConfig(locals.runtime.env);
+export const GET: APIRoute = async () => {
+	const config = getNavidromeConfig(env as unknown as Env);
 
 	if (!config) {
 		return json(

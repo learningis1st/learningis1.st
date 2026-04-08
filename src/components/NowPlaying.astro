@@ -1,5 +1,6 @@
 ---
 import { getNowPlayingPayload } from "../lib/now-playing/server";
+import { env } from "cloudflare:workers";
 
 export interface Props {
 	endpoint?: string;
@@ -15,7 +16,7 @@ let initialPayload: any = null;
 // Attempt to fetch the initial payload during Server-Side Rendering (SSR).
 // This prevents layout shifts and provides a snappy initial load.
 try {
-	const runtimeEnv = Astro.locals?.runtime?.env as Env | undefined;
+	const runtimeEnv = env as unknown as Env;
 	if (runtimeEnv) {
 		const { status, payload } = await getNowPlayingPayload(runtimeEnv);
 		if (status >= 200 && status < 300) {

@@ -1,5 +1,6 @@
 import type { APIRoute } from "astro";
 import { getNowPlayingPayload } from "../../lib/now-playing/server";
+import { env } from "cloudflare:workers";
 
 export const prerender = false;
 
@@ -12,8 +13,8 @@ const json = (body: Record<string, unknown>, init?: ResponseInit) =>
 			...init?.headers,
 		},
 	});
-export const GET: APIRoute = async ({ locals }) => {
-	const { status, payload } = await getNowPlayingPayload(locals.runtime?.env);
+export const GET: APIRoute = async () => {
+	const { status, payload } = await getNowPlayingPayload(env as unknown as Env);
 	return json(payload as Record<string, unknown>, { status });
 };
 

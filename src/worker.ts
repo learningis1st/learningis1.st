@@ -1,4 +1,4 @@
-import { createExports as createCloudflareExports } from "@astrojs/cloudflare/entrypoints/server.js";
+import createCloudflareExports from "@astrojs/cloudflare/entrypoints/server.js";
 import { syncLastListened } from "./worker/syncLastListened";
 
 export const scheduled: ExportedHandlerScheduledHandler<Env> = async (_event, env, context) => {
@@ -19,12 +19,12 @@ export const scheduled: ExportedHandlerScheduledHandler<Env> = async (_event, en
 	);
 };
 
-export const createExports = (manifest: Parameters<typeof createCloudflareExports>[0]) => {
-	const baseExports = createCloudflareExports(manifest);
+export const createExports = (manifest: any) => {
+	const baseExports = (createCloudflareExports as any)(manifest);
 	return {
-		...baseExports,
+		...(baseExports as any),
 		default: {
-			...baseExports.default,
+			...(baseExports as any).default,
 			scheduled,
 		},
 		scheduled,
