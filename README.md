@@ -74,6 +74,11 @@ If `LAST_LISTENED_KV` is missing, `/api/now-playing.json` still works but fallba
 
 ## API routes
 
+- `GET /.well-known/api-catalog`
+  - returns RFC 9727 API discovery metadata as `application/linkset+json`
+  - includes `service-desc`, `service-doc`, and `status` relations for the `/api` anchor
+- `GET /api/openapi.json`
+  - serves an OpenAPI 3.1 document for the currently available API endpoints
 - `GET /api/now-playing.json`
   - returns `200` for normal/fallback payloads
   - returns `500` when required Navidrome env vars are missing
