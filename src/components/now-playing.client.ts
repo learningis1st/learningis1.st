@@ -50,6 +50,7 @@ type WidgetState = {
 	durationSec: number;
 	lastTick: number;
 	lastAnnouncementKey: string;
+	hasSeenNonPlaying: boolean;
 };
 
 type ProgressFrameInput = {
@@ -97,6 +98,7 @@ const createInitialState = (): WidgetState => ({
 	durationSec: 0,
 	lastTick: Date.now(),
 	lastAnnouncementKey: "",
+	hasSeenNonPlaying: false,
 });
 
 const calculateProgressFrame = (input: ProgressFrameInput) => {
@@ -446,6 +448,14 @@ export const initNowPlayingWidget = (root: HTMLElement) => {
 		const albumArtist = track.albumArtist || track.artist || "Unknown artist";
 
 		if (source !== "playing") {
+			// Guard against brief upstream non-playing states during song switches.
+			// If we were previously playing and haven't seen a non-playing state yet,
+			// retry shortly instead of going to full idle sleep, preserving track state.
+			if (state.trackKey !== null && !state.hasSeenNonPlaying) {
+				state.hasSeenNonPlaying = true;
+				return NOW_PLAYING_CFG.TRACK_SWITCH_POLL_SEC * 1000;
+			}
+
 			setTextContent(els.track, track.album || "Unknown album");
 			setTextContent(els.meta, albumArtist);
 			setLabelText("Last listened album");
@@ -465,6 +475,8 @@ export const initNowPlayingWidget = (root: HTMLElement) => {
 			}
 			return NOW_PLAYING_CFG.IDLE_POLL_SEC * 1000;
 		}
+
+		state.hasSeenNonPlaying = false;
 
 		setTextContent(els.track, title);
 		setTextContent(els.meta, metaStr);
