@@ -70,6 +70,8 @@ export const getNowPlayingPayload = async (env: Env) => {
 		return {
 			status: 200,
 			payload: {
+				// Upstream semantics: if getNowPlaying returns a track, we map it to "playing".
+				// Navidrome can keep this state true while paused; clients should treat it as best effort.
 				isPlaying: true,
 				source: "playing",
 				track,

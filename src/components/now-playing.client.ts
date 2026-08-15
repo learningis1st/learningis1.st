@@ -18,6 +18,8 @@ type Payload = {
 } | null;
 
 const NOW_PLAYING_CFG = {
+	// Navidrome reports coarse progress snapshots in 60s steps (0, 60, 120, ...).
+	// The client interpolates between snapshots for smoother UI progress.
 	QUANTUM_SEC: 60,
 	MIN_POLL_SEC: 1.5,
 	END_WINDOW_EXTRA_SEC: 0.5,
@@ -62,6 +64,7 @@ type ProgressFrameInput = {
 
 const clampPercent = (value: number) => Math.max(0, Math.min(100, value));
 
+// Compact deterministic signature to detect track changes across payloads.
 const getTrackKey = (t?: Track | null) =>
 	JSON.stringify([t?.title, t?.artist, t?.album, t?.albumArtist, t?.coverArtId, t?.durationSeconds]);
 
@@ -109,6 +112,7 @@ const calculateProgressFrame = (input: ProgressFrameInput) => {
 
 	const deltaTickSec = Math.max(0, (nowMs - lastTickMs) / 1000);
 	const elapsedSinceBaseSec = Math.max(0, (nowMs - baseTimestampMs) / 1000);
+	// We never extrapolate beyond one upstream quantum without fresh server data.
 	const maxAllowedSec = basePositionSec + quantumSec;
 	const targetSec = Math.min(basePositionSec + elapsedSinceBaseSec, maxAllowedSec, durationSec);
 
@@ -116,6 +120,8 @@ const calculateProgressFrame = (input: ProgressFrameInput) => {
 	let adjustedVisualSec = visualSec;
 	let speed = 1.0;
 
+	// Easing: accelerate when behind >0.5s (catch-up), jump instantly when
+	// visual is ahead >5s (large drift), slow to 0.5x when slightly ahead.
 	if (distanceSec > 0.5) {
 		speed = 1.0 + (distanceSec / 5.0);
 	} else if (distanceSec < -5.0) {
@@ -159,6 +165,10 @@ const computeNextPollDelayMs = (params: {
 	const estimatedPos = basePositionSec + elapsedSinceBaseSec;
 	const remainingSec = Math.max(0, durationSec - estimatedPos);
 
+	// Normal mode uses adaptive pollRateSec; boundary mode sleeps near the next expected
+	// upstream quantum to reduce unnecessary requests while still catching fresh progress quickly.
+	// Wake at QUANTUM_SEC - (uncertaintySec/2): early enough to catch fresh progress,
+	// late enough to avoid redundant requests.
 	let nextDelayMs = triggerBoundarySleep
 		? (NOW_PLAYING_CFG.QUANTUM_SEC - (uncertaintySec / 2)) * 1000
 		: pollRateSec * 1000;
@@ -170,6 +180,8 @@ const computeNextPollDelayMs = (params: {
 			nextDelayMs = NOW_PLAYING_CFG.END_POLL_RATE_SEC * 1000;
 		} else {
 			const timeUntilEndWindowMs = (remainingSec - currentEndWindowSec) * 1000;
+			// Clamp: never sleep past the end window, but don't poll faster than
+			// END_POLL_RATE_SEC either.
 			nextDelayMs = Math.max(
 				NOW_PLAYING_CFG.END_POLL_RATE_SEC * 1000,
 				Math.min(nextDelayMs, timeUntilEndWindowMs),
@@ -327,6 +339,9 @@ export const initNowPlayingWidget = (root: HTMLElement) => {
 		window.setTimeout(() => {
 			if (!document.contains(root)) return;
 			coverWrap.hidden = false;
+			// Assign handlers then null them: the setTimeout fires in the next
+			// macrotask, so the handlers persist until then. Nulling prevents
+			// double-fire on subsequent setCover calls.
 			cover.onload = cover.onerror = () => {
 				coverWrap.classList.remove("transitioning");
 				cover.onload = cover.onerror = null;
@@ -335,6 +350,7 @@ export const initNowPlayingWidget = (root: HTMLElement) => {
 		}, NOW_PLAYING_CFG.COVER_TRANSITION_MS);
 	};
 
+	// Use scaleX instead of width for GPU-composited animation.
 	const setProgress = (percent: number, shouldShow: boolean) => {
 		if (!els.progress || !els.progressBar) return;
 
@@ -393,6 +409,9 @@ export const initNowPlayingWidget = (root: HTMLElement) => {
 		}, Math.max(NOW_PLAYING_CFG.MIN_FETCH_DELAY_MS, delayMs));
 	};
 
+	// Core state reducer for API payloads.
+	// Upstream now-playing signals are treated as best effort, then client-side interpolation
+	// smooths coarse/quantized progress updates while guarding against stale fetch races.
 	const handlePayload = (payload: Payload, fetchStartMs: number) => {
 		clearLoading();
 
@@ -408,6 +427,9 @@ export const initNowPlayingWidget = (root: HTMLElement) => {
 		}
 
 		const { track, source, lastPlayedAt } = payload;
+		// Note: Navidrome may continue reporting "playing" even when playback is paused
+		// (and may keep advancing positionSeconds) until the player/app is fully closed.
+		// This widget therefore treats source as a best-effort signal, not a guaranteed real-time truth.
 
 		if (els.status) els.status.hidden = true;
 		if (els.track) els.track.hidden = false;
@@ -454,6 +476,7 @@ export const initNowPlayingWidget = (root: HTMLElement) => {
 		if (els.time) els.time.hidden = true;
 
 		const trackKey = getTrackKey(track);
+		// Guard against negative positionSeconds from upstream.
 		const rawSec = Math.max(0, payload.progress?.positionSeconds || 0);
 		const durationSec = track.durationSeconds || 0;
 		const timestamp = fetchStartMs || Date.now();
@@ -475,7 +498,7 @@ export const initNowPlayingWidget = (root: HTMLElement) => {
 			}
 		} else if (rawSec < state.basePosition) {
 			// Server-side position correction: update tracking state only.
-			// The progress bar (visualSec) intentionally never goes backwards.
+			// visualSec may jump backward here if the large-drift correction was triggered.
 			state.basePosition = rawSec;
 			state.baseTimestamp = timestamp;
 			state.uncertaintySec = NOW_PLAYING_CFG.QUANTUM_SEC;
@@ -483,7 +506,10 @@ export const initNowPlayingWidget = (root: HTMLElement) => {
 		} else if (rawSec > state.basePosition) {
 			state.basePosition = rawSec;
 			state.baseTimestamp = timestamp;
+			// Set uncertainty to the tightened poll rate so boundary sleep uses the
+			// shorter interval instead of the full 60s quantum.
 			state.uncertaintySec = state.pollRateSec;
+			// If upstream advances, tighten polling briefly so interpolation re-syncs quickly.
 			state.pollRateSec = Math.max(NOW_PLAYING_CFG.MIN_POLL_SEC, state.pollRateSec / 2);
 			triggerBoundarySleep = true;
 		}
@@ -506,9 +532,11 @@ export const initNowPlayingWidget = (root: HTMLElement) => {
 	const fetchNowPlaying = async () => {
 		if (!document.contains(root)) return;
 
+		// Monotonic request id ignores stale responses from slower previous fetches.
 		const reqId = ++state.reqId;
 		if (!state.hasLoaded) showLoadingWithDelay();
 
+		// Anchor interpolation to request start (not response receipt) to offset network latency.
 		const fetchStartMs = Date.now();
 
 		try {
