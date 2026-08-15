@@ -1,0 +1,44 @@
+---
+export interface Props {
+	title: string;
+	description: string;
+	canonical?: string;
+	ogImage?: string;
+	ogImageAlt?: string;
+	siteName?: string;
+}
+
+const {
+	title,
+	description,
+	canonical,
+	ogImage,
+	ogImageAlt,
+	siteName = "learningis1.st",
+} = Astro.props;
+
+const normalizedTitle = title.trim();
+const normalizedDescription = description.trim();
+const normalizedSiteName = siteName.trim();
+const normalizedOgImageAlt = ogImageAlt?.trim() || `${normalizedTitle} social preview`;
+---
+
+<meta name="description" content={normalizedDescription} />
+{canonical && <link rel="canonical" href={canonical} />}
+
+<meta property="og:type" content="website" />
+<meta property="og:site_name" content={normalizedSiteName} />
+<meta property="og:title" content={normalizedTitle} />
+<meta property="og:description" content={normalizedDescription} />
+<meta property="og:locale" content="en_US" />
+{canonical && <meta property="og:url" content={canonical} />}
+{ogImage && <meta property="og:image" content={ogImage} />}
+{ogImage && <meta property="og:image:alt" content={normalizedOgImageAlt} />}
+
+<meta name="twitter:card" content={ogImage ? "summary_large_image" : "summary"} />
+<meta name="twitter:title" content={normalizedTitle} />
+<meta name="twitter:description" content={normalizedDescription} />
+{canonical && <meta name="twitter:url" content={canonical} />}
+{ogImage && <meta name="twitter:image" content={ogImage} />}
+{ogImage && <meta name="twitter:image:alt" content={normalizedOgImageAlt} />}
+
